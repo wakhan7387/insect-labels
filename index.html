@@ -538,6 +538,7 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
     <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border-2)">
       <div class="rowflex">
         <button class="btn" id="c-link">다른 기기용 설정 링크 만들기</button>
+        <button class="btn" id="c-linkhide" style="display:none">숨기기</button>
         <span class="hint">이 링크를 새 기기에서 한 번 열면 토큰 입력 없이 바로 연결됩니다.</span>
       </div>
       <div id="c-linkbox" style="display:none;margin-top:10px">
@@ -583,7 +584,7 @@ const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 /* ─────── 상태 ─────── */
-const BUILD='2026-08-28 · v10';
+const BUILD='2026-08-28 · v12';
 const DB={spec:[],site:[],chk:[],cont:[]};
 const SHA={};
 let CFG={owner:'',repo:'',branch:'main',store:'local',token:'',
@@ -1568,7 +1569,7 @@ $('#chk-clear').onclick=async()=>{try{const d=await idb();
   }catch(e){} cacheInfo(); say('종목록 캐시를 지웠습니다.');};
 
 /* GitHub */
-const api=p=>`https://api.github.com/repos/${CFG.owner}/${CFG.repo}/${p}`;
+const api=p=>`https://api.github.com/repos/${CFG.owner}/${CFG.repo}`+(p?'/'+p:'');
 const gh=(url,opt={})=>fetch(url,{...opt,headers:{Authorization:'Bearer '+CFG.token,
   Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28',...(opt.headers||{})}});
 async function ghRead(path,soft){
@@ -1649,7 +1650,10 @@ $('#c-pull').onclick=async()=>{
     stampSync();
     $('#c-info').textContent=`불러왔습니다 — 표본 ${DB.spec.length}건.`;
     say(`GitHub에서 불러왔습니다 — 표본 ${DB.spec.length}건.`);
-  }catch(e){$('#c-info').textContent=''; say(e.message,'bad');}
+  }catch(e){$('#c-info').textContent='';
+    say(/Failed to fetch|NetworkError|Load failed/i.test(e.message)
+      ? '요청이 브라우저에서 막혔습니다 — 광고차단 확장이나 회사망 프록시일 수 있습니다. 연결 진단을 눌러 안내를 확인하십시오.'
+      : e.message,'bad');}
 };
 /* 기기 추가 링크 — 설정을 주소 조각(#setup=)에 담아 옮긴다. 서버로는 전송되지 않는 부분이다 */
 const b64u={
@@ -1665,9 +1669,14 @@ $('#c-link').onclick=()=>{
   if(!CFG.owner||!CFG.repo||!CFG.token)return say('사용자·저장소·토큰을 먼저 채우십시오.','bad');
   const url=location.origin+location.pathname+'#setup='+b64u.enc(
     {o:CFG.owner,r:CFG.repo,b:CFG.branch,t:CFG.token,c:CFG.coll,e:CFG.collen,p:CFG.prefix});
-  $('#c-linkbox').style.display=''; $('#c-linkurl').value=url;
+  $('#c-linkbox').style.display=''; $('#c-linkhide').style.display=''; $('#c-linkurl').value=url;
   try{navigator.clipboard.writeText(url).then(()=>say('링크를 복사했습니다.'),()=>{});}catch(e){}
   $('#c-linkurl').select&&$('#c-linkurl').select();
+};
+$('#c-linkhide').onclick=()=>{
+  $('#c-linkurl').value='';                 /* 화면에서 토큰 흔적을 지운다 */
+  $('#c-linkbox').style.display='none';
+  $('#c-linkhide').style.display='none';
 };
 function consumeSetup(){
   const m=/^#setup=([A-Za-z0-9_-]+)$/.exec(location.hash||'');
@@ -1721,7 +1730,14 @@ $('#c-test').onclick=async()=>{
     if(CFG.branch!==meta.default_branch)
       L.push(wr(`브랜치 칸이 <b>${esc(CFG.branch)}</b> 인데 기본 브랜치는 <b>${esc(meta.default_branch)}</b> 입니다 — 불러오기 때 자동으로 맞춥니다.`));
     show();
-  }catch(e){L.push(no('저장소 확인 중 오류: '+e.message));return show();}
+  }catch(e){
+    L.push(no('저장소 확인 중 오류: '+e.message));
+    if(/Failed to fetch|NetworkError|Load failed/i.test(e.message)){
+      L.push(wr('요청이 브라우저 단계에서 막혔습니다. 흔한 원인 — ① 광고차단·보안 확장(uBlock, AdGuard 등)이 api.github.com 을 차단 ② 회사망 프록시가 OPTIONS 요청을 막음 ③ VPN/방화벽.'));
+      L.push(wr('시크릿 창(Ctrl+Shift+N)에서 열어 확장 없이 시험해 보십시오. 그래도 안 되면 다른 네트워크(휴대폰 테더링)에서 확인하면 원인이 갈립니다.'));
+    }
+    return show();
+  }
   const br=meta.default_branch;
   let found=0;
   for(const [k,pth] of Object.entries(PATH)){
