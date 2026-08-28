@@ -262,10 +262,10 @@ input.cell:focus{background:var(--canvas)}
 .in>div{display:flex;align-items:center;justify-content:center;overflow:hidden;text-align:center;padding:0 1.5mm}
 .in .kr{font-family:"Malgun Gothic","맑은 고딕",sans-serif}
 .in .it{font-style:italic;font-weight:700}
-/* 여러 항목이 든 줄은 라벨 좌우 끝으로 벌린다 — 좁은 간격으로 붙어 보이던 문제
-   (KOREACNJH000012, 126.79…36.50… 처럼 읽히던 것) */
-.in .hd{font-weight:700;justify-content:space-between;gap:4mm}
-.in .gp{justify-content:space-between;gap:5mm}
+/* 여러 항목이 든 줄은 가운데 모아 일정 간격으로 둔다 (v25의 space-between은 너무 벌어졌음).
+   gap 값은 10배 좌표계 기준 — 4mm = 실제 0.4mm */
+.in .hd{font-weight:700;gap:4mm}
+.in .gp{gap:5mm}
 .in .one{white-space:nowrap}
 .f27{font-size:27pt}.f36{font-size:36pt}.f40{font-size:40pt}.f45{font-size:45pt}.f50{font-size:49.5pt}
 .dry{width:calc(20.002mm*var(--k));height:calc(11.430mm*var(--k))}
@@ -810,7 +810,7 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const sciFmt=s=>esc(s).replace(/([()])/g,'<span class="rm">$1</span>');
 
 /* ─────── 상태 ─────── */
-const BUILD='2026-08-28 · v26';
+const BUILD='2026-08-28 · v27';
 const DB={spec:[],site:[],chk:[],cont:[]};
 const SHA={};
 let CFG={owner:'',repo:'',branch:'main',store:'local',token:'',
