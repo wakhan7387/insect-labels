@@ -270,8 +270,6 @@ input.cell:focus{background:var(--canvas)}
 .f27{font-size:27pt}.f36{font-size:36pt}.f40{font-size:40pt}.f45{font-size:45pt}.f50{font-size:49.5pt}
 .dry{width:calc(20.002mm*var(--k));height:calc(11.430mm*var(--k))}
 .dry .in{width:200.02mm;height:114.30mm;transform:scale(calc(.1*var(--k)))}
-.wet{width:calc(36.671mm*var(--k));height:calc(26.194mm*var(--k))}
-.wet .in{width:366.71mm;height:261.94mm;transform:scale(calc(.1*var(--k)))}
 
 .ruler{background:#fff;color:#000;padding:12mm;border:1px solid var(--border);border-radius:6px;margin-top:14px}
 .rbar{position:relative;width:calc(100mm*var(--k));height:9mm;border:.3mm solid #000;border-top:none;margin:5mm 0 8mm}
@@ -667,8 +665,8 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
     <div style="font-size:9pt">막대 전체가 정확히 100mm여야 합니다. 아래 두 사각형은 라벨 실제 크기입니다.</div>
     <div class="rbar" id="rbar"></div>
     <div style="display:flex;gap:8mm;align-items:flex-end">
-      <div><div class="lab dry" style="border:.3mm solid #000"></div><div style="font-size:7pt;margin-top:1mm">건조 20.0 × 11.43</div></div>
-      <div><div class="lab wet" style="border:.3mm solid #000"></div><div style="font-size:7pt;margin-top:1mm">액침 36.67 × 26.19</div></div>
+      <div><div class="lab dry" style="border:.3mm solid #000"></div><div style="font-size:7pt;margin-top:1mm">라벨 1장 20.0 × 11.43</div></div>
+      <div><div class="set" style="outline:.3mm solid #000"><div class="lab dry"></div><div class="lab dry"></div></div><div style="font-size:7pt;margin-top:1mm">한 세트 20.0 × 22.86</div></div>
     </div>
   </div>
 
@@ -785,7 +783,7 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
       <div><label class="fl">채집자</label><input type="text" id="c-coll" placeholder="이재호"></div>
       <div><label class="fl">채집자(영문)</label><input type="text" id="c-collen" placeholder="JH Lee"></div>
       <div><label class="fl">번호 접두어</label><input type="text" id="c-prefix" class="mono" placeholder="JH"></div>
-      <div><label class="fl">액침 라벨 기관명 — 비우면 미표시</label><input type="text" id="c-inst" placeholder=""></div>
+      <div><label class="fl">기관명 — 동정면 오른쪽에 찍힙니다. 비우면 미표시</label><input type="text" id="c-inst" placeholder=""></div>
     </div>
     <div class="rowflex" style="margin-top:12px"><button class="btn" id="c-save2">저장</button></div>
     </div>
@@ -812,7 +810,7 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const sciFmt=s=>esc(s).replace(/([()])/g,'<span class="rm">$1</span>');
 
 /* ─────── 상태 ─────── */
-const BUILD='2026-08-28 · v25';
+const BUILD='2026-08-28 · v26';
 const DB={spec:[],site:[],chk:[],cont:[]};
 const SHA={};
 let CFG={owner:'',repo:'',branch:'main',store:'local',token:'',
@@ -2091,46 +2089,42 @@ function renderQueue(){
 }
 
 /* 라벨 조판 — 10배 좌표계 축소 방식 (기하 검증 완료, 임의 수정 금지) */
-function dryLabel(s){
+/* ─── 라벨 한 세트 = 채집면 + 동정면, 20.002 × 11.430mm 두 장 ───
+   보존 형태와 무관하게 모든 표본이 같은 규격이다(액침은 두 장을 tube에 함께 넣는다).
+   높이 합은 반드시 114.30mm — 10배 좌표계이므로 실제 11.430mm가 된다. */
+function labelSet(s){
   const st=siteOf(s.site_id)||{};
+  /* tube에 여러 마리가 든 경우를 위해 성별 뒤에 개체수 */
+  const sx=[SEX[s.sex]||'',((s.count||1)>1?String(s.count):'')].filter(Boolean).join(' ');
+  const mark=STATUSMARK[s.status]
+    ?`<span class="rm" style="font-weight:400"> ${STATUSMARK[s.status]}</span>`:'';
+  const kor=String(s.kor||'').trim();
+  /* 국명이 없으면 그 칸을 학명이 물려받는다 — 반쪽이 비어 보이지 않게 */
+  const sciH=kor?38.10:95.25;
+  const inst=String(CFG.inst||'').trim();
   return `<div class="set"><div class="lab dry"><div class="in">
-    <div class="hd f36" style="height:19.05mm"><span>KOREA</span><span>${esc(rcode(st.region))}</span><span>${esc(s.no)}</span></div>
+    <div class="hd fit f36" style="height:19.05mm"><span>KOREA</span><span>${esc(rcode(st.region))}</span><span>${esc(s.no)}</span></div>
     <div class="fit f27" style="height:38.10mm;line-height:1.15">${esc(st.locality_en||'')}</div>
     <div class="fit f36" style="height:19.05mm">${esc(dateStr(s))}</div>
     <div class="gp fit f36" style="height:19.05mm"><span>${fmt6(st.lon)}</span><span>${fmt6(st.lat)}</span></div>
-    <div class="gp f36" style="height:19.05mm"><span>Coll.</span><span class="f27">${esc(s.collector_en||'')}</span></div>
+    <div class="fit f36" style="height:19.05mm">Coll. ${esc(s.collector_en||'')}</div>
   </div></div>
   <div class="lab dry"><div class="in">
-    <div class="kr fit f36" style="height:57.15mm;line-height:1.15"><span>${esc(s.kor||'')}</span></div>
-    <div class="it fit one f36" style="height:38.10mm;line-height:1.15"><span>${sciFmt(s.sci)}${SEX[s.sex]?' '+SEX[s.sex]:''}${
-      STATUSMARK[s.status]?`<span class="rm" style="font-weight:400"> ${STATUSMARK[s.status]}</span>`:''}</span></div>
-    <div class="gp f36" style="height:19.05mm"><span>Det.</span><span class="f27">${esc(s.det_by_en||'')}</span></div>
+    ${kor?`<div class="kr fit f36" style="height:57.15mm;line-height:1.15"><span>${esc(kor)}</span></div>`:''}
+    <div class="it fit one f36" style="height:${sciH}mm;line-height:1.15"><span>${sciFmt(s.sci)}${sx?' '+sx:''}${mark}</span></div>
+    ${inst
+      ?`<div class="gp fit f36" style="height:19.05mm"><span>Det. ${esc(s.det_by_en||'')}</span><span>${esc(inst)}</span></div>`
+      :`<div class="fit f36" style="height:19.05mm">Det. ${esc(s.det_by_en||'')}</div>`}
   </div></div></div>`;
 }
-function wetLabel(s){
-  const st=siteOf(s.site_id)||{};
-  const loc=[s.container,s.position].filter(Boolean).join(' ');
-  return `<div class="lab wet"><div class="in">
-    <div class="hd fit f50" style="height:35.72mm"><span>KOREA</span><span>${esc(rcode(st.region))}</span>${CFG.inst?`<span>${esc(CFG.inst)}</span>`:''}<span>${esc(s.no)}</span></div>
-    <div class="kr fit f45" style="height:28.57mm">${esc(s.kor||'')}</div>
-    <div class="it fit one f45" style="height:28.57mm"><span>${sciFmt(s.sci)}${
-      STATUSMARK[s.status]?`<span class="rm" style="font-weight:400"> ${STATUSMARK[s.status]}</span>`:''}</span></div>
-    <div class="fit f40" style="height:42.86mm;line-height:1.15">${esc(st.locality_en||'')}</div>
-    <div class="fit f45" style="height:28.57mm">${esc(dateStr(s))}</div>
-    <div class="gp fit f45" style="height:28.57mm"><span>${fmt6(st.lon)}</span><span>${fmt6(st.lat)}</span></div>
-    <div class="gp fit f45" style="height:33.34mm"><span>Coll. ${esc(s.collector_en||'')}</span><span>Det. ${esc(s.det_by_en||'')}</span></div>
-    <div class="gp fit f45" style="height:35.74mm"><span>${SEX[s.sex]||''} ${s.count||1}</span><span>${esc(loc)}</span></div>
-  </div></div>`;
-}
 function renderSheet(){
-  const dry=[],wet=[];
+  const list=[];
   for(const q of queue){const s=specOf(q.no);if(!s)continue;
-    for(let i=0;i<q.copies;i++)(s.preservation==='wet'?wet:dry).push(s);}
+    for(let i=0;i<q.copies;i++)list.push(s);}
   const g=$('#p-guide').checked?' guides':'';
-  let h='';
-  if(dry.length)h+=`<div class="lgrid${g}">${dry.map(dryLabel).join('')}</div>`;
-  if(wet.length)h+=`<div class="lgrid${g} ${dry.length?'pb':''}" style="margin-top:${dry.length?'8mm':'0'}">${wet.map(wetLabel).join('')}</div>`;
-  $('#sheetin').innerHTML=h||'<p class="hint" style="color:#888">대기열이 비어 있습니다.</p>';
+  $('#sheetin').innerHTML=list.length
+    ? `<div class="lgrid${g}">${list.map(labelSet).join('')}</div>`
+    : '<p class="hint" style="color:#888">대기열이 비어 있습니다.</p>';
   autofit(); fitPreview();
 }
 function autofit(){
@@ -2601,7 +2595,7 @@ function renderDossier(no){
 function applyK(){
   const m=parseFloat($('#p-meas').value)||100, k=100/m;
   document.documentElement.style.setProperty('--k',k);
-  $('#p-k').textContent=`보정 ${k.toFixed(4)} · 건조 ${(20.002*k).toFixed(2)}mm · 액침 ${(36.671*k).toFixed(2)}mm`;
+  $('#p-k').textContent=`보정 ${k.toFixed(4)} · 라벨 ${(20.002*k).toFixed(2)} × ${(11.430*k).toFixed(2)}mm · 세트 ${(22.860*k).toFixed(2)}mm`;
   $('#rulerpage').style.display=$('#p-ruler').checked?'':'none';
   autofit();
 }
