@@ -40,7 +40,9 @@ button,input,select,textarea{font:inherit;color:inherit}
 
 /* ── 언더라인 탭 ── */
 .gnb{border-bottom:1px solid var(--border);background:var(--canvas);position:sticky;top:0;z-index:30}
-.gnb .inner{max-width:1360px;margin:0 auto;padding:0 12px;display:flex}
+.gnb .inner{max-width:1360px;margin:0 auto;padding:0 12px;display:flex;overflow-x:auto;scrollbar-width:none}
+.gnb .inner::-webkit-scrollbar{display:none}
+.gnb button{flex:none}
 .gnb button{background:none;border:0;padding:11px 16px;font-size:14px;color:var(--fg);cursor:pointer;position:relative}
 .gnb button:hover{background:var(--hover);border-radius:6px 6px 0 0}
 .gnb button.on{font-weight:600;box-shadow:inset 0 -2px 0 var(--coral)}
@@ -75,6 +77,15 @@ textarea{resize:vertical;min-height:54px}
 .grid{display:grid;gap:12px}
 .g2{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}
 @media(max-width:840px){.g3,.g4{grid-template-columns:repeat(2,1fr)}}
+/* 좁은 화면: 표를 세로로 뭉개지 말고 가로로 밀어서 본다 */
+@media(max-width:760px){
+  .g2,.g3,.g4{grid-template-columns:1fr}
+  main{padding:14px 12px 70px}
+  #tbl th,#tbl td{white-space:nowrap}
+  #tbl td:nth-child(3){white-space:normal;min-width:170px}
+  .ghdr .inner{padding:10px 14px;gap:10px}
+  #sheet{width:auto}
+}
 
 .btn{background:var(--subtle);border:1px solid rgba(31,35,40,.15);padding:5px 14px;border-radius:6px;
   cursor:pointer;font-size:13.5px;font-weight:500;white-space:nowrap;color:var(--fg)}
@@ -517,9 +528,24 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
       <input type="text" id="c-token" placeholder="github_pat_..." autocomplete="off"></div>
     <div class="rowflex" style="margin-top:12px">
       <button class="btn pri" id="c-pull">GitHub에서 불러오기</button>
+      <button class="btn" id="c-test">연결 진단</button>
       <button class="btn" id="c-save">설정 저장</button>
       <span class="hint" id="c-info"></span>
+      <span class="grow"></span><span class="hint" id="c-sync"></span>
     </div>
+    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border-2)">
+      <div class="rowflex">
+        <button class="btn" id="c-link">다른 기기용 설정 링크 만들기</button>
+        <span class="hint">이 링크를 새 기기에서 한 번 열면 토큰 입력 없이 바로 연결됩니다.</span>
+      </div>
+      <div id="c-linkbox" style="display:none;margin-top:10px">
+        <input type="text" id="c-linkurl" readonly onclick="this.select()" class="mono" style="font-size:12px">
+        <p class="hint" style="margin-top:7px;color:var(--bad)">이 링크에는 토큰이 들어 있어 <b>비밀번호와 같습니다.</b>
+        메신저·메일로 남기지 말고, 새 기기에서 연 뒤에는 링크를 지우십시오. 유출됐다면 GitHub에서 토큰을 삭제하고 새로 발급하면 됩니다.</p>
+      </div>
+    </div>
+    <div id="c-diag" style="display:none;margin-top:12px;border:1px solid var(--border);border-radius:6px;
+      padding:12px 14px;font-size:13px;line-height:1.9;background:var(--subtle)"></div>
     </div>
   </div>
 
@@ -569,7 +595,7 @@ const LTYPE={loan:'대여',return:'반납',memo:'메모'};
 /* ─────── 유틸 ─────── */
 function b64enc(str){const b=new TextEncoder().encode(str);let s='';const C=0x8000;
   for(let i=0;i<b.length;i+=C)s+=String.fromCharCode.apply(null,b.subarray(i,i+C));return btoa(s);}
-function b64dec(x){const bin=atob(String(x).replace(/\s/g,''));const b=new Uint8Array(bin.length);
+function b64dec(x){if(!x)return'';const bin=atob(String(x).replace(/\s/g,''));const b=new Uint8Array(bin.length);
   for(let i=0;i<bin.length;i++)b[i]=bin.charCodeAt(i);return new TextDecoder().decode(b);}
 const parseJL=t=>t.split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{try{return JSON.parse(l)}catch(e){return null}}).filter(Boolean);
 const toJL=a=>a.map(o=>JSON.stringify(o,Object.keys(o).sort())).join('\n')+'\n';
@@ -642,16 +668,33 @@ function counts(){
   const t=$('#tabn'); t.style.display=DB.spec.length?'':'none'; t.textContent=DB.spec.length;
 }
 
-/* ─────── 탭 ─────── */
-$$('.gnb button[data-v]').forEach(b=>b.onclick=()=>{
-  $$('.gnb button[data-v]').forEach(x=>x.classList.toggle('on',x===b));
-  $$('.view').forEach(v=>v.classList.toggle('on',v.id==='v-'+b.dataset.v));
-  if(b.dataset.v==='box')renderBox();
-  if(b.dataset.v==='boxin')renderContTable();
-  if(b.dataset.v==='print')renderQueue();
-  /* 탭으로 처음 들어오면 폼을 초기화 — select들이 빈 채로 보이는 일 방지 */
-  if(b.dataset.v==='entry'&&!$('#e-det').options.length)openEntry(null);
-});
+/* ─────── 탭 · 브라우저 뒤로/앞으로 ─────── */
+function showView(v,no){
+  $$('.gnb button[data-v]').forEach(x=>x.classList.toggle('on',x.dataset.v===v));
+  $$('.view').forEach(x=>x.classList.toggle('on',x.id==='v-'+v));
+  if(v==='box')renderBox();
+  if(v==='boxin')renderContTable();
+  if(v==='print')renderQueue();
+  if(v==='entry'){
+    if(no&&specOf(no))fillEntry(no);
+    else if(!$('#e-det').options.length)fillEntry(null);
+  }
+}
+/* 주소 해시에 상태를 남긴다 — #list, #entry/JH000012 */
+function go(v,no,replace){
+  const hash='#'+v+(no?'/'+no:'');
+  if(location.hash!==hash){
+    history[replace?'replaceState':'pushState']({v,no},'',hash);
+  }
+  showView(v,no);
+}
+function fromHash(){
+  const m=/^#([a-z]+)(?:\/([A-Za-z0-9-]+))?$/.exec(location.hash||'');
+  const v=m&&['list','entry','boxin','box','print','conf'].includes(m[1])?m[1]:'list';
+  showView(v,m&&m[2]);
+}
+window.addEventListener('popstate',fromHash);
+$$('.gnb button[data-v]').forEach(b=>b.onclick=()=>go(b.dataset.v));
 
 /* ─────── 표본목록 ─────── */
 function filtered(){
@@ -951,10 +994,9 @@ $('#e-no').addEventListener('input',()=>{
   if(!$('#e-no').value.trim())$('#e-no').value=CFG.prefix;         /* 전체 삭제해도 JH는 남는다 */
 });
 
-function openEntry(no){
+function openEntry(no){ go('entry',no||null); }
+function fillEntry(no){
   const s=no?specOf(no):null; editing=s?s.no:null;
-  $$('.gnb button[data-v]').forEach(x=>x.classList.toggle('on',x.dataset.v==='entry'));
-  $$('.view').forEach(v=>v.classList.toggle('on',v.id==='v-entry'));
   $('#e-title').textContent=s?`표본 ${s.no}`:'새 표본';
   $('#e-del').style.display=s?'':'none';
   $('#e-parent').textContent=s&&s.parent_no?`모체 ${s.parent_no}`:'';
@@ -981,7 +1023,7 @@ function openEntry(no){
   $('#e-flags').innerHTML='<span class="hint">종을 고르면 표시됩니다</span>';
   siteOptions(s?s.site_id:lastSiteId());
 }
-$('#e-new').onclick=()=>openEntry(null);
+$('#e-new').onclick=()=>go('entry',null);
 
 function saveRec(){
   let no=$('#e-no').value.trim();
@@ -1031,6 +1073,7 @@ function saveRec(){
   DB.spec.sort((a,b)=>numOf(a.no)-numOf(b.no));
   editing=rec.no; mark(true); refreshFilters(); renderList(); counts(); fillContList();
   siteOptions(rec.site_id);
+  go('entry',rec.no,true);
   $('#e-title').textContent=`표본 ${rec.no}`; $('#e-del').style.display='';
   $('#e-split').style.display=(rec.preservation==='wet'&&rec.count>0)?'':'none';
   const bn=say(rec.container?`${rec.no} 저장 — ${rec.container}${rec.position?' '+rec.position:''} 에 들어갔습니다.`:`${rec.no} 저장했습니다.`);
@@ -1061,7 +1104,7 @@ $('#e-del').onclick=()=>{
   const b=say(`${editing} 을(를) 삭제할까요?`,'bad');
   const y=document.createElement('button'); y.className='btn sm dgr'; y.textContent='삭제';
   y.onclick=()=>{DB.spec=DB.spec.filter(s=>s.no!==editing);mark(true);renderList();counts();
-    openEntry(null);b.classList.remove('on');};
+    go('entry',null);b.classList.remove('on');};
   $('#bacts').append(y);
 };
 
@@ -1145,7 +1188,7 @@ $('#sp-go').onclick=()=>{
   DB.spec.sort((a,b)=>numOf(a.no)-numOf(b.no));
   mark(true); renderList(); counts(); $('#splitbox').style.display='none';
   say(`${n}개체를 분리했습니다. ${s.no} 잔량 ${s.count}.`);
-  openEntry(s.no);
+  fillEntry(s.no);
 };
 
 /* 새 지점 입력 보조 */
@@ -1519,37 +1562,175 @@ $('#chk-clear').onclick=async()=>{try{const d=await idb();
 const api=p=>`https://api.github.com/repos/${CFG.owner}/${CFG.repo}/${p}`;
 const gh=(url,opt={})=>fetch(url,{...opt,headers:{Authorization:'Bearer '+CFG.token,
   Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28',...(opt.headers||{})}});
-async function ghRead(path){
+async function ghRead(path,soft){
   let r=await gh(api(`contents/${path}?ref=${encodeURIComponent(CFG.branch)}`));
-  if(r.status===404)return{rows:[],sha:null};
+  if(r.status===404){if(soft)return{rows:[],sha:null,missing:true};
+    throw new Error(`${path} 를 찾을 수 없습니다 (404). 저장소·브랜치 이름과 파일 경로를 확인하십시오.`);}
+  if(r.status===401)throw new Error('토큰이 거부되었습니다 (401). 토큰을 새로 발급해 붙여넣으십시오.');
+  if(r.status===403)throw new Error('접근이 거부되었습니다 (403). 토큰 권한에 Contents: Read and write 가 있는지 확인하십시오.');
   if(!r.ok)throw new Error(`${path}: HTTP ${r.status} ${(await r.text()).slice(0,120)}`);
   const j=await r.json();
-  if(j.content&&j.content.length)return{rows:parseJL(b64dec(j.content)),sha:j.sha};
-  const b=await gh(api(`git/blobs/${j.sha}`));
-  if(!b.ok)throw new Error(`${path}: blob HTTP ${b.status}`);
-  return{rows:parseJL(b64dec((await b.json()).content)),sha:j.sha};
+  if(!j.size)return{rows:[],sha:j.sha};                 /* 빈 파일 — blobs로 가면 안 된다 */
+  if(j.content&&j.content.trim())return{rows:parseJL(b64dec(j.content)),sha:j.sha};
+  const b=await gh(api(`git/blobs/${j.sha}`));          /* 1MB 초과 파일 */
+  if(!b.ok)throw new Error(`${path}: 대용량 파일 읽기 실패 HTTP ${b.status}`);
+  const bj=await b.json();
+  if(!bj.content)throw new Error(`${path}: 내용을 받지 못했습니다.`);
+  return{rows:parseJL(b64dec(bj.content)),sha:j.sha};
 }
-async function ghWrite(path,text,sha,msg){
+async function ghWrite(path,text,sha,msg,force){
+  if(force){                                    /* 원격 최신 sha를 다시 받아 덮어쓴다 */
+    const g0=await gh(api(`contents/${path}?ref=${encodeURIComponent(CFG.branch)}`));
+    sha = g0.ok ? (await g0.json()).sha : undefined;
+  }
   const r=await gh(api(`contents/${path}`),{method:'PUT',body:JSON.stringify({
     message:msg, content:b64enc(text), branch:CFG.branch, ...(sha?{sha}:{})})});
+  if(r.status===409||r.status===422){
+    const e=new Error(`${path} 충돌`); e.conflict=true; throw e;
+  }
   if(!r.ok)throw new Error(`${path}: HTTP ${r.status} ${(await r.text()).slice(0,160)}`);
   return (await r.json()).content.sha;
 }
 $('#c-pull').onclick=async()=>{
-  readCfg(); if(!CFG.owner||!CFG.repo||!CFG.token)return say('사용자·저장소·토큰을 채우십시오.','bad');
+  readCfg();
+  const miss=[];
+  if(!CFG.owner)miss.push('사용자');
+  if(!CFG.repo)miss.push('비공개 저장소');
+  if(!CFG.token)miss.push('토큰');
+  if(miss.length){
+    $('#c-diag').style.display='';
+    $('#c-diag').innerHTML=`<div><b style="color:var(--bad)">✗</b> 비어 있는 칸: <b>${miss.join(' · ')}</b></div>`
+      +(!CFG.token&&CFG.store==='session'
+        ? '<div style="margin-top:6px">토큰 보관이 <b>창 닫으면 삭제</b>로 되어 있습니다 — 브라우저를 닫았다면 토큰을 다시 붙여넣어야 합니다.</div>'
+        : '<div style="margin-top:6px">세 칸을 채운 뒤 <b>설정 저장</b>을 누르면 다음부터 자동으로 채워집니다.</div>');
+    miss.forEach(m=>{const el=m==='사용자'?'#c-owner':m==='토큰'?'#c-token':'#c-repo';
+      $(el).style.outline='2px solid var(--bad)';
+      setTimeout(()=>$(el).style.outline='',2500);});
+    return say(`${miss.join(', ')} 칸이 비어 있습니다.`,'bad');
+  }
+  $('#c-diag').style.display='none';
   $('#c-info').textContent='불러오는 중…';
   try{
-    const a=await ghRead(PATH.spec), b=await ghRead(PATH.site), c=await ghRead(PATH.cont);
+    const rr=await gh(api(''));           /* 저장소 접근부터 확인 */
+    if(rr.status===401)throw new Error('토큰이 거부되었습니다 (401). 연결 진단을 눌러 확인하십시오.');
+    if(rr.status===404)throw new Error(`${CFG.owner}/${CFG.repo} 저장소를 찾을 수 없습니다. 이름 오타이거나 토큰에 이 저장소 접근 권한이 없습니다. 연결 진단을 눌러보십시오.`);
+    if(!rr.ok)throw new Error(`저장소 확인 실패 HTTP ${rr.status}`);
+    const meta=await rr.json();
+    if(CFG.branch!==meta.default_branch){
+      CFG.branch=meta.default_branch; $('#c-branch').value=CFG.branch;
+      say(`브랜치를 ${CFG.branch} 로 맞췄습니다.`,'warn');
+    }
+    const a=await ghRead(PATH.spec,1), b=await ghRead(PATH.site,1), c=await ghRead(PATH.cont,1);
+    if(a.missing&&b.missing&&c.missing){
+      $('#c-info').textContent='';
+      const bn=say(`${CFG.owner}/${CFG.repo} 에 자료 파일이 없습니다 — 지금 화면의 자료로 만들까요?`,'warn');
+      const y=document.createElement('button'); y.className='btn sm pri'; y.textContent='파일 만들기';
+      y.onclick=async()=>{bn.classList.remove('on'); await $('#save').click();};
+      $('#bacts').append(y);
+      return;
+    }
     DB.spec=a.rows.map(normSpec).sort((x,y)=>numOf(x.no)-numOf(y.no)); SHA.spec=a.sha;
     DB.site=b.rows; SHA.site=b.sha;
     DB.cont=c.rows.map(normCont); SHA.cont=c.sha;
     if(!DB.chk.length){
-      try{const k=await ghRead(PATH.chk);
+      try{const k=await ghRead(PATH.chk,1);
         if(k.rows.length){DB.chk=k.rows; idbPut(DB.chk);}}catch(e){}
     }
-    afterLoad(); $('#c-info').textContent='불러왔습니다.'; say('GitHub에서 불러왔습니다.');
+    afterLoad();
+    stampSync();
+    $('#c-info').textContent=`불러왔습니다 — 표본 ${DB.spec.length}건.`;
+    say(`GitHub에서 불러왔습니다 — 표본 ${DB.spec.length}건.`);
   }catch(e){$('#c-info').textContent=''; say(e.message,'bad');}
 };
+/* 기기 추가 링크 — 설정을 주소 조각(#setup=)에 담아 옮긴다. 서버로는 전송되지 않는 부분이다 */
+const b64u={
+  enc:o=>btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(o))))
+        .replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''),
+  dec:s=>{s=s.replace(/-/g,'+').replace(/_/g,'/');
+    const bin=atob(s+'='.repeat((4-s.length%4)%4));
+    const by=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)by[i]=bin.charCodeAt(i);
+    return JSON.parse(new TextDecoder().decode(by));}
+};
+$('#c-link').onclick=()=>{
+  readCfg();
+  if(!CFG.owner||!CFG.repo||!CFG.token)return say('사용자·저장소·토큰을 먼저 채우십시오.','bad');
+  const url=location.origin+location.pathname+'#setup='+b64u.enc(
+    {o:CFG.owner,r:CFG.repo,b:CFG.branch,t:CFG.token,c:CFG.coll,e:CFG.collen,p:CFG.prefix});
+  $('#c-linkbox').style.display=''; $('#c-linkurl').value=url;
+  try{navigator.clipboard.writeText(url).then(()=>say('링크를 복사했습니다.'),()=>{});}catch(e){}
+  $('#c-linkurl').select&&$('#c-linkurl').select();
+};
+function consumeSetup(){
+  const m=/^#setup=([A-Za-z0-9_-]+)$/.exec(location.hash||'');
+  if(!m)return false;
+  let d=null; try{d=b64u.dec(m[1]);}catch(e){}
+  history.replaceState(null,'','#list');       /* 주소에서 토큰을 즉시 지운다 */
+  if(!d||!d.o||!d.r||!d.t){say('설정 링크를 읽지 못했습니다.','bad');return false;}
+  $('#c-owner').value=d.o; $('#c-repo').value=d.r; $('#c-branch').value=d.b||'main';
+  $('#c-token').value=d.t;
+  if(d.c)$('#c-coll').value=d.c; if(d.e)$('#c-collen').value=d.e; if(d.p)$('#c-prefix').value=d.p;
+  saveCfg(); say('이 기기에 설정을 적용했습니다 — 자료를 불러옵니다.');
+  return true;
+}
+
+/* 연결 진단 — 어느 단계에서 막혔는지 한 줄씩 짚어준다 */
+$('#c-test').onclick=async()=>{
+  readCfg();
+  const D=$('#c-diag'); D.style.display=''; D.innerHTML='확인 중…';
+  const L=[]; const ok=t=>`<div><b style="color:var(--ok)">✓</b> ${t}</div>`;
+  const no=t=>`<div><b style="color:var(--bad)">✗</b> ${t}</div>`;
+  const wr=t=>`<div><b style="color:var(--warn)">!</b> ${t}</div>`;
+  const show=()=>D.innerHTML=L.join('');
+  if(!CFG.owner||!CFG.repo||!CFG.token){
+    L.push(no('사용자·저장소·토큰 세 칸을 모두 채우십시오.')); return show();
+  }
+  L.push(ok(`입력값 — 사용자 <b>${esc(CFG.owner)}</b> · 저장소 <b>${esc(CFG.repo)}</b> · 브랜치 <b>${esc(CFG.branch)}</b>`)); show();
+  try{
+    const u=await fetch('https://api.github.com/user',{headers:{Authorization:'Bearer '+CFG.token,
+      Accept:'application/vnd.github+json'}});
+    if(u.status===401){L.push(no('토큰이 거부되었습니다 (401) — 만료됐거나 잘못 복사된 토큰입니다. 새로 발급하십시오.'));return show();}
+    if(!u.ok){L.push(no(`토큰 확인 실패 HTTP ${u.status}`));return show();}
+    const uj=await u.json();
+    L.push(ok(`토큰 정상 — 계정 <b>${esc(uj.login)}</b>`)); show();
+    if(uj.login.toLowerCase()!==CFG.owner.toLowerCase())
+      L.push(wr(`사용자 칸(${esc(CFG.owner)})이 토큰 계정(${esc(uj.login)})과 다릅니다. 남의 저장소가 아니라면 <b>${esc(uj.login)}</b> 으로 바꾸십시오.`));
+    show();
+  }catch(e){L.push(no('github.com 에 연결하지 못했습니다 — 인터넷·방화벽을 확인하십시오.'));return show();}
+  let meta=null;
+  try{
+    const r=await gh(api(''));
+    if(r.status===404){
+      L.push(no(`저장소 <b>${esc(CFG.owner)}/${esc(CFG.repo)}</b> 를 찾을 수 없습니다.`));
+      L.push(wr('원인 두 가지 — ① 이름 오타 ② fine-grained 토큰의 Repository access 에 이 저장소가 빠짐. 토큰 설정에서 <b>Only select repositories</b> 목록을 확인하십시오.'));
+      return show();
+    }
+    if(!r.ok){L.push(no(`저장소 확인 실패 HTTP ${r.status}`));return show();}
+    meta=await r.json();
+    L.push(ok(`저장소 접근 가능 — ${meta.private?'비공개':'공개'} · 기본 브랜치 <b>${esc(meta.default_branch)}</b>`));
+    if(meta.permissions&&meta.permissions.push)L.push(ok('쓰기 권한 있음 (Contents: Read and write)'));
+    else L.push(no('쓰기 권한이 없습니다 — 토큰 Permissions 에서 <b>Contents: Read and write</b> 로 바꾸십시오. (읽기 전용 토큰이면 정상입니다)'));
+    if(CFG.branch!==meta.default_branch)
+      L.push(wr(`브랜치 칸이 <b>${esc(CFG.branch)}</b> 인데 기본 브랜치는 <b>${esc(meta.default_branch)}</b> 입니다 — 불러오기 때 자동으로 맞춥니다.`));
+    show();
+  }catch(e){L.push(no('저장소 확인 중 오류: '+e.message));return show();}
+  const br=meta.default_branch;
+  let found=0;
+  for(const [k,pth] of Object.entries(PATH)){
+    try{
+      const r=await gh(api(`contents/${pth}?ref=${encodeURIComponent(br)}`));
+      if(r.ok){const j=await r.json();
+        L.push(ok(`<span class="mono">${pth}</span> 있음 (${(j.size/1024).toFixed(0)}KB)`)); found++;}
+      else if(r.status===404)L.push(wr(`<span class="mono">${pth}</span> 없음${k==='chk'?' — 종목록을 이 저장소에 두지 않았다면 정상입니다':''}`));
+      else L.push(no(`<span class="mono">${pth}</span> HTTP ${r.status}`));
+    }catch(e){L.push(no(`${pth} 확인 실패`));}
+    show();
+  }
+  L.push(`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">${
+    found?'준비됐습니다 — <b>GitHub에서 불러오기</b>를 누르십시오.'
+        :'저장소는 정상인데 자료 파일이 없습니다 — <b>GitHub에서 불러오기</b>를 누르면 지금 화면의 자료로 파일을 만들어 줍니다.'}</div>`);
+  show();
+};
+
 $('#save').onclick=async()=>{
   if(!CFG.token||!CFG.owner||!CFG.repo){
     download('specimens.jsonl',toJL(DB.spec)); download('sites.jsonl',toJL(DB.site));
@@ -1557,18 +1738,49 @@ $('#save').onclick=async()=>{
     mark(false); draftClear();
     return say('GitHub 설정이 없어 파일로 내려받았습니다. 다음에 열 때 이 파일들을 다시 불러오십시오.','warn');
   }
+  await doSync(false);
+};
+async function doSync(force){
   $('#status').textContent='커밋 중…';
   try{
     const msg=`표본 갱신 ${new Date().toISOString().slice(0,16).replace('T',' ')}`;
-    SHA.spec=await ghWrite(PATH.spec,toJL(DB.spec),SHA.spec,msg);
-    SHA.site=await ghWrite(PATH.site,toJL(DB.site),SHA.site,msg);
-    SHA.cont=await ghWrite(PATH.cont,toJL(DB.cont),SHA.cont,msg);
-    mark(false); draftClear(); say('커밋했습니다.');
-  }catch(e){$('#status').textContent='커밋 실패';$('#status').className='err';say(e.message,'bad');}
-};
+    SHA.spec=await ghWrite(PATH.spec,toJL(DB.spec),SHA.spec,msg,force);
+    SHA.site=await ghWrite(PATH.site,toJL(DB.site),SHA.site,msg,force);
+    SHA.cont=await ghWrite(PATH.cont,toJL(DB.cont),SHA.cont,msg,force);
+    mark(false); draftClear(); stampSync(); say('커밋했습니다.');
+  }catch(e){
+    $('#status').textContent='커밋 실패'; $('#status').className='err';
+    if(e.conflict){
+      const bn=say('다른 기기에서 먼저 저장한 변경이 있습니다 — 어떻게 할까요?','warn');
+      const a1=document.createElement('button'); a1.className='btn sm'; a1.textContent='다른 기기 것 가져오기';
+      a1.onclick=()=>{bn.classList.remove('on');$('#c-pull').click();};
+      const a2=document.createElement('button'); a2.className='btn sm dgr'; a2.textContent='내 것으로 덮어쓰기';
+      a2.onclick=()=>{bn.classList.remove('on');doSync(true);};
+      $('#bacts').append(a1,a2);
+    }else say(e.message,'bad');
+  }
+}
+function stampSync(){
+  try{localStorage.setItem('ilsync',new Date().toISOString());}catch(e){}
+  showSyncStamp();
+}
+function showSyncStamp(){
+  let t=''; try{t=localStorage.getItem('ilsync')||'';}catch(e){}
+  $('#c-sync').textContent=t?`마지막 동기화 ${t.slice(0,16).replace('T',' ')}`:'';
+}
 
 /* 설정 */
-function readCfg(){CFG.owner=$('#c-owner').value.trim();CFG.repo=$('#c-repo').value.trim();
+/* 주소를 통째로 붙여넣어도 알아서 분리한다 (https://github.com/user/repo 등) */
+function cleanGh(){
+  let o=$('#c-owner').value.trim().replace(/^https?:\/\/(www\.)?github\.com\//i,'').replace(/^@/,'');
+  let r=$('#c-repo').value.trim().replace(/^https?:\/\/(www\.)?github\.com\//i,'').replace(/\.git$/i,'');
+  if(r.includes('/')){const p=r.split('/').filter(Boolean); if(p.length>=2){o=p[0];r=p[1];} else r=p[0]||'';}
+  if(o.includes('/'))o=o.split('/')[0];
+  o=o.replace(/[^A-Za-z0-9-]/g,''); r=r.replace(/[^A-Za-z0-9._-]/g,'');
+  $('#c-owner').value=o; $('#c-repo').value=r;
+  return {o,r};
+}
+function readCfg(){const g=cleanGh();CFG.owner=g.o;CFG.repo=g.r;
   CFG.branch=$('#c-branch').value.trim()||'main';CFG.store=$('#c-store').value;
   CFG.token=$('#c-token').value.trim();CFG.coll=$('#c-coll').value.trim()||'이재호';
   CFG.collen=$('#c-collen').value.trim()||'JH Lee';CFG.prefix=($('#c-prefix').value.trim()||'JH');
@@ -1605,9 +1817,12 @@ $('#c-save').onclick=saveCfg; $('#c-save2').onclick=saveCfg;
       try{const r=await fetch(p);if(r.ok){DB.chk=parseJL(await r.text());idbPut(DB.chk);break;}}catch(e){}
     }
   }
-  cacheInfo();
+  cacheInfo(); showSyncStamp();
+  const setup=consumeSetup();
+  fromHash();
   if(CFG.owner&&CFG.repo&&CFG.token){$('#c-pull').click();}
   else{afterLoad();}
+  if(setup)return;   /* 새 기기 첫 연결 — 초안 복원 물어볼 것 없음 */
   /* 저장(커밋) 없이 닫혔던 변경분이 있으면 복원 제안 */
   try{
     const d=JSON.parse(localStorage.getItem('ildraft')||'null');
