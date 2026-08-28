@@ -4,6 +4,8 @@
 <meta name="robots" content="noindex,nofollow">
 <title>곤충 표본 관리</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
 /* ══════════════════════════════════════════════════════════════
    GitHub 라이트 팔레트 — 검정 헤더 + 흰 본문, 회색 테두리 박스
@@ -94,6 +96,7 @@ textarea{resize:vertical;min-height:54px}
   input[type=text],input[type=number],input[type=date],select,textarea{font-size:16px;padding:9px 11px}
   .btn{padding:8px 14px}
   .btn.sm{padding:5px 10px}
+  #v-map #map{height:62vh}       /* 본문 규칙이 더 뒤에 있어 선택자 특이도로 이긴다 */
   /* 지점 선택기 — 손가락으로 누를 크기로 */
   .pick-btn{min-height:44px;font-size:16px}
   .pick-i{padding:10px 8px;font-size:15px}
@@ -157,6 +160,20 @@ input.cell:focus{background:var(--canvas)}
 .tag.g{background:var(--ok-l);color:var(--ok);border-color:transparent}
 .tag.w{background:var(--warn-l);color:var(--warn);border-color:transparent}
 .tag.r{background:var(--bad-l);color:var(--bad);border-color:transparent}
+.tag.p{background:#fbefff;color:#8250df;border-color:transparent}
+
+/* 지도 */
+#map{height:540px;position:relative;z-index:0;background:var(--subtle)}
+#map .leaflet-popup-content{font-size:12.5px;line-height:1.5;margin:10px 14px}
+#map svg.fb{width:100%;height:100%;display:block;cursor:grab;touch-action:none}
+#map svg.fb:active{cursor:grabbing}
+.fb-note{position:absolute;left:8px;bottom:8px;z-index:5;font-size:11px;color:var(--mut);
+  background:rgba(255,255,255,.85);padding:2px 8px;border-radius:4px}
+#fb-info{position:absolute;right:8px;top:8px;z-index:5;font-size:12px;max-width:250px;display:none;
+  background:#fff;border:1px solid var(--border);border-radius:6px;padding:8px 11px;box-shadow:0 4px 12px rgba(31,35,40,.12)}
+#mapsum .fl{display:block;font-size:12px;color:var(--fg);margin-bottom:3px;font-weight:600}
+#dossier .fl{display:block;font-size:12px;color:var(--fg);margin-bottom:3px;font-weight:600}
+#fmap{height:300px;border:1px solid var(--border);border-radius:6px;position:relative;z-index:0;background:var(--subtle)}
 
 /* 종명 검색 결과 — 입력창 아래 인라인 목록 */
 .ac-list{border:1px solid var(--border);border-radius:6px;margin-top:8px;max-height:250px;overflow:auto;display:none}
@@ -278,6 +295,9 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
   .ghdr,.gnb,footer,.noprint,.banner,main>.view:not(.on){display:none!important}
   main{padding:0;max-width:none}
   #sheet,.ruler{border:0;border-radius:0;padding:0;margin:0}
+  /* 패딩이 빠지면 내부 폭이 210mm가 되어 한 줄 10세트 — 10번째가 여백에 잘린다.
+     인쇄 가능 폭(210 − 여백 10×2)으로 고정해 화면과 같은 9세트 줄바꿈을 강제한다 */
+  #sheet{width:190mm}
   .ruler{page-break-after:always}
   .pb{page-break-before:always}
 }
@@ -297,6 +317,8 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
   <button data-v="boxin">보관함입력</button>
   <button data-v="box">보관함</button>
   <button data-v="print">라벨출력</button>
+  <button data-v="map">지도</button>
+  <button data-v="find">검색</button>
   <button data-v="conf">설정</button>
 </div></nav>
 
@@ -312,7 +334,8 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
       <select id="f-fam" style="width:auto"><option value="">과 전체</option></select>
       <select id="f-status" style="width:auto">
         <option value="">동정 상태 전체</option><option value="new">신종 후보</option>
-        <option value="unrec">미기록 후보</option><option value="any">후보 표시 있음</option>
+        <option value="unrec">미기록 후보</option><option value="undet">미동정</option>
+        <option value="any">후보 표시 있음</option>
         <option value="fixed">확정만</option></select>
       <select id="f-exp" style="width:auto">
         <option value="">실험 전체</option><option value="dissect">해부한 것</option>
@@ -326,6 +349,7 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
     <span class="hint" id="lcount"></span><div class="grow"></div>
     <button class="btn sm" id="dl-xls">Excel 내려받기</button>
     <button class="btn sm" id="sel-to-q">선택한 것을 출력 대기열로</button>
+    <button class="btn sm dgr" id="sel-del">선택 삭제</button>
     <span class="hint" id="selinfo"></span>
   </div>
   <div class="tbl-wrap"><table id="tbl">
@@ -436,6 +460,7 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
       <span class="hint">동정 상태:</span>
       <div class="seg" id="e-status">
         <button data-st="" class="on">확정</button>
+        <button data-st="undet">미동정</button>
         <button data-st="new">신종 후보</button>
         <button data-st="unrec">미기록 후보</button>
       </div>
@@ -460,9 +485,33 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
         <input type="text" id="e-pos" class="mono" list="posdl" placeholder="A1">
         <datalist id="posdl"></datalist>
         <div class="mini" id="e-minigrid"></div></div>
-      <div class="rowflex" style="align-items:flex-end">
-        <button class="btn" id="e-split" style="display:none">개체 분리</button>
+      <div><label class="fl">개체 꺼내기</label>
+        <button class="btn" id="e-split" style="display:none">개체 분리</button></div>
+    </div>
+
+    <!-- 개체 분리 — ③보관 바로 아래에 열린다 -->
+    <div id="splitbox" style="margin-top:12px;border:1px dashed var(--border);border-radius:6px;padding:12px 14px;display:none">
+      <p class="hint" style="margin-bottom:10px"><b>개체 분리</b> — tube에서 개체를 꺼내 새 번호를 부여합니다.
+        건조로 만들거나 별도 tube로 나눌 때 쓰며, 채집 정보는 상속되고 원 tube의 개체수가 그만큼 줄어듭니다.
+        새 번호는 parent 표시로 원 tube와 이어지고, 실험을 체크해 두면 분리된 개체에 바로 기록됩니다.</p>
+      <div class="grid g4" style="align-items:end">
+        <div><label class="fl">꺼낼 개체수</label><input type="number" id="sp-n" min="1" value="1"></div>
+        <div><label class="fl">성별</label><select id="sp-sex">
+          <option value="__same">원본과 같음</option><option value="">미상</option>
+          <option value="M">♂ 수컷</option><option value="F">♀ 암컷</option></select></div>
+        <div><label class="fl">보존 형태</label><select id="sp-pres">
+          <option value="dry">건조</option><option value="wet">액침 (새 tube)</option></select></div>
+        <div><label class="fl">옮길 박스 — 숫자만 쳐도 됩니다</label>
+          <input type="text" id="sp-cont" class="mono" list="contdl2" autocomplete="off">
+          <datalist id="contdl2"></datalist></div>
       </div>
+      <div class="rowflex" style="margin-top:12px">
+        <label class="rowflex" style="gap:5px"><input type="checkbox" id="sp-dissect" style="width:auto">해부 · 생식기 슬라이드</label>
+        <label class="rowflex" style="gap:5px"><input type="checkbox" id="sp-dna" style="width:auto">DNA 추출</label>
+        <div class="grow"></div>
+        <button class="btn pri" id="sp-go">분리</button><button class="btn" id="sp-cancel">취소</button>
+      </div>
+      <p class="hint" id="sp-prev" style="margin-top:9px"></p>
     </div>
 
     <h3><span class="stepn">4</span>실험 <span class="subtiny">생식기 슬라이드는 여기서 체크 — 본체와 함께 보관</span></h3>
@@ -488,22 +537,14 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
       <button class="btn" id="lg-add">추가</button>
     </div>
     <p class="hint" style="margin-top:7px">대여를 추가하면 목록에 <span class="tag r">대여중</span> 표시가 붙고, 반납을 추가하면 사라집니다.</p>
-    </div>
-  </div>
 
-  <div class="card" id="splitbox" style="display:none">
-    <div class="card-h">개체 분리</div>
-    <div class="card-b">
-    <p class="hint" style="margin-bottom:12px">tube에서 개체를 꺼내 건조표본으로 만들면서 새 번호를 부여합니다. 채집 정보는 상속되고 원 tube의 잔여 개체수가 줄어듭니다.</p>
-    <div class="grid g4" style="align-items:end">
-      <div><label class="fl">꺼낼 개체수</label><input type="number" id="sp-n" min="1" value="1"></div>
-      <div><label class="fl">옮길 박스(건조) — 숫자만 쳐도 됩니다</label>
-        <input type="text" id="sp-cont" class="mono" list="contdl2" autocomplete="off">
-        <datalist id="contdl2"></datalist></div>
-      <div class="rowflex" style="grid-column:span 2">
-        <button class="btn pri" id="sp-go">분리</button><button class="btn" id="sp-cancel">취소</button></div>
+    <!-- 긴 입력 화면 맨 밑에서도 저장할 수 있게 — 위 버튼과 같은 동작 -->
+    <div class="rowflex" style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border-2);justify-content:flex-end">
+      <button class="btn sm dgr" id="e-del2" style="display:none">삭제</button>
+      <div class="grow"></div>
+      <button class="btn sm" id="e-next2">저장 후 이어서</button>
+      <button class="btn sm pri" id="e-save2">저장</button>
     </div>
-    <p class="hint" id="sp-prev" style="margin-top:9px"></p>
     </div>
   </div>
 
@@ -615,6 +656,34 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
   <div id="sheetwrap"><div id="sheet"><div id="sheetin"></div></div></div>
 </section>
 
+<!-- ══ 지도 ══ -->
+<section class="view" id="v-map">
+  <div class="card"><div class="card-b">
+    <div class="rowflex">
+      <div><label class="fl">과</label><select id="m-fam" style="width:auto"><option value="">과 전체</option></select></div>
+      <div><label class="fl">속</label><select id="m-gen" style="width:auto"><option value="">속 전체</option></select></div>
+      <div style="align-self:flex-end;padding-bottom:6px"><button class="btn sm" id="m-all">전체 보기</button></div>
+      <div class="grow"></div>
+      <span class="hint" id="m-info" style="align-self:flex-end;padding-bottom:8px"></span>
+    </div>
+  </div></div>
+  <div class="card" style="overflow:hidden"><div id="map"></div>
+    <div class="hint" id="m-coord" style="padding:6px 12px;border-top:1px solid var(--border-2)">지점을 누르면 좌표·고도가 여기에 표시됩니다. 오른쪽 위에서 일반 ↔ 위성을 바꿀 수 있습니다.</div></div>
+  <p class="hint" id="m-nocoord" style="margin:8px 2px"></p>
+  <div class="card"><div class="card-h">요약 <span class="subtiny" style="font-weight:400">— 위 과·속 필터가 적용된 표본 기준</span></div>
+    <div class="card-b" id="mapsum"></div></div>
+</section>
+
+<!-- ══ 검색 — 표본 한 건의 모든 것 ══ -->
+<section class="view" id="v-find">
+  <div class="card"><div class="card-b">
+    <label class="fl">채집번호를 입력하십시오 — jh1 처럼 대충 쳐도 되고, 구번호(LJH…)·종명·채집지로도 찾아집니다</label>
+    <input type="text" id="fq" placeholder="JH000001" autocomplete="off" class="mono">
+    <div class="ac-list" id="fq-list"></div>
+  </div></div>
+  <div id="dossier"><p class="hint" style="margin-top:14px">표본 하나를 고르면 채집·계보·보관·실험·기록이 지도와 함께 한 화면에 나옵니다.</p></div>
+</section>
+
 <!-- ══ 설정 ══ -->
 <section class="view" id="v-conf">
   <div class="card">
@@ -712,7 +781,7 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const sciFmt=s=>esc(s).replace(/([()])/g,'<span class="rm">$1</span>');
 
 /* ─────── 상태 ─────── */
-const BUILD='2026-08-28 · v19';
+const BUILD='2026-08-28 · v22';
 const DB={spec:[],site:[],chk:[],cont:[]};
 const SHA={};
 let CFG={owner:'',repo:'',branch:'main',store:'local',token:'',
@@ -724,8 +793,8 @@ const PRES={wet:'액침',dry:'건조'};
 const SEX={M:'♂',F:'♀','':''};
 const CTYPE={grid:'격자 9×9',free:'상자형'};
 const LTYPE={loan:'대여',return:'반납',memo:'메모'};
-const STATUS={new:'신종 후보',unrec:'미기록 후보'};
-const STATUSMARK={new:'n. sp.?',unrec:'new rec.?'};
+const STATUS={new:'신종 후보',unrec:'미기록 후보',undet:'미동정'};
+const STATUSMARK={new:'n. sp.?',unrec:'new rec.?',undet:''};   /* 미동정은 라벨에 마커 없음 */
 
 /* ─────── 유틸 ─────── */
 function b64enc(str){const b=new TextEncoder().encode(str);let s='';const C=0x8000;
@@ -810,6 +879,8 @@ function showView(v,no){
   if(v==='box')renderBox();
   if(v==='boxin')renderContTable();
   if(v==='print')renderQueue();
+  if(v==='map')mapShow(no);
+  if(v==='find')findShow(no);
   if(v==='entry'){
     if(no==='new')fillEntry(null);              /* 명시적 새 표본 — 반드시 초기화 */
     else if(no&&specOf(no))fillEntry(no);
@@ -830,7 +901,7 @@ function go(v,no,replace){
 }
 function fromHash(){
   const m=/^#([a-z]+)(?:\/([A-Za-z0-9-]+))?$/.exec(location.hash||'');
-  const v=m&&['list','entry','boxin','box','print','conf'].includes(m[1])?m[1]:'list';
+  const v=m&&['list','entry','boxin','box','print','map','find','conf'].includes(m[1])?m[1]:'list';
   showView(v,m&&m[2]);
 }
 window.addEventListener('popstate',fromHash);
@@ -860,7 +931,7 @@ function filtered(){
     if(ln&&!loanOpen(s))return false;
     if(ex==='none'){if(s.exp.dissect||s.exp.dna||s.exp.photo)return false;}
     else if(ex&&!s.exp[ex])return false;
-    if(st1==='any'){if(!s.status)return false;}
+    if(st1==='any'){if(s.status!=='new'&&s.status!=='unrec')return false;}   /* 후보 표시 = 신종·미기록만 */
     else if(st1==='fixed'){if(s.status)return false;}
     else if(st1&&s.status!==st1)return false;
     if(!q)return true;
@@ -870,14 +941,17 @@ function filtered(){
   });
 }
 function expTags(s){
-  const t=[];
-  if(s.status)t.push(`<span class="tag w">${STATUS[s.status]}</span>`);
-  if(s.exp.dissect)t.push('<span class="tag b">해부</span>');
-  if(s.exp.dna)t.push('<span class="tag b">DNA</span>');
-  if(s.exp.photo)t.push('<span class="tag b">사진</span>');
+  const t=[], xn=esc(s.exp.note||'');           /* 실험 비고를 툴팁으로 */
+  if(s.status)t.push(`<span class="tag ${s.status==='undet'?'':'w'}">${STATUS[s.status]}</span>`);
+  if(s.exp.dissect)t.push(`<span class="tag p" title="${xn}">해부</span>`);
+  if(s.exp.dna)t.push(`<span class="tag g" title="${xn}">DNA</span>`);
+  if(s.exp.photo)t.push(`<span class="tag b" title="${xn}">사진</span>`);
   const lo=loanOpen(s);
   if(lo)t.push(`<span class="tag r" title="${esc(lo.text||'')}">대여중</span>`);
-  else if((s.log||[]).length)t.push(`<span class="tag">기록 ${s.log.length}</span>`);
+  else if((s.log||[]).length){
+    const last=s.log.slice(-2).map(l=>[l.date,LTYPE[l.type]||l.type,l.text].filter(Boolean).join(' ')).join('\n');
+    t.push(`<span class="tag" title="${esc(last)}">기록 ${s.log.length}</span>`);
+  }
   return t.join('');
 }
 function renderList(){
@@ -890,9 +964,11 @@ function renderList(){
       <td class="c"><input type="checkbox" class="rc" data-no="${esc(s.no)}" ${selected.has(s.no)?'checked':''} style="width:auto"></td>
       <td class="n"><a class="lnk mono" data-edit="${esc(s.no)}" title="편집">${esc(s.no)}</a>${s.parent_no?`<div class="tag">← ${esc(s.parent_no)}</div>`:''}</td>
       <td>${esc(s.kor||'')}${s.kor&&s.sci?'<br>':''}<span class="sci">${sciFmt(s.sci)}</span>
-          ${s.det_note?'<span class="tag w">비고</span>':''}</td>
+          ${s.det_note?`<span class="tag w" title="${esc(s.det_note)}">비고</span>`:''}</td>
       <td>${esc(s.family_ko||s.family_la||'')}</td>
-      <td>${esc(st?st.region:'')} ${esc(st?(st.locality_ko||'').split(' ').slice(-2).join(' '):'')}</td>
+      <td>${st?`<a class="lnk" data-map="${esc(s.site_id)}" title="${esc([st.locality_en||'',
+            st.lon!=null?st.lon+', '+st.lat:'',st.elev!=null?st.elev+'m':'',st.note||''].filter(Boolean).join(' · '))}
+— 지도에서 보기">${esc(siteText(st))}</a>`:''}</td>
       <td class="n mono c">${esc(dateStr(s))}</td>
       <td class="n c">${PRES[s.preservation]||''} ${SEX[s.sex]||''}</td>
       <td class="n mono c">${s.count||0}</td>
@@ -903,6 +979,7 @@ function renderList(){
 
   $$('#tb .rc').forEach(c=>c.onchange=()=>{c.checked?selected.add(c.dataset.no):selected.delete(c.dataset.no);selinfo();});
   $$('#tb [data-edit]').forEach(b=>b.onclick=()=>openEntry(b.dataset.edit));
+  $$('#tb [data-map]').forEach(a=>a.onclick=()=>go('map',a.dataset.map));
   selinfo();
 }
 const selinfo=()=>$('#selinfo').textContent=selected.size?`${selected.size}건 선택됨`:'';
@@ -911,6 +988,25 @@ const selinfo=()=>$('#selinfo').textContent=selected.size?`${selected.size}건 �
 $('#chk-all').onchange=e=>{filtered().forEach(s=>e.target.checked?selected.add(s.no):selected.delete(s.no));renderList();};
 $('#sel-to-q').onclick=()=>{if(!selected.size)return say('선택된 표본이 없습니다.','warn');
   [...selected].forEach(addQ); goPrint();};
+
+/* 목록에서 삭제 — 경고 배너에서 한 번 더 확인해야 실행된다 */
+$('#sel-del').onclick=()=>{
+  if(!selected.size)return say('삭제할 표본을 먼저 왼쪽 체크박스로 고르십시오.','warn');
+  const nos=[...selected];
+  const orphan=DB.spec.filter(s=>s.parent_no&&selected.has(s.parent_no)&&!selected.has(s.no)).length;
+  const b=say(`⚠ ${nos.length}건을 삭제합니다 — ${nos.slice(0,5).join(', ')}${nos.length>5?` 외 ${nos.length-5}건`:''}. `
+    +`삭제 후 저장(동기화)하면 되돌릴 수 없습니다.${orphan?` 분리된 개체 ${orphan}건은 남아 모체 표시만 끊깁니다.`:''}`,'bad');
+  const y=document.createElement('button'); y.className='btn sm dgr'; y.textContent='정말 삭제';
+  y.onclick=()=>{
+    DB.spec=DB.spec.filter(s=>!selected.has(s.no));
+    queue=queue.filter(q=>!selected.has(q.no));
+    if(editing&&selected.has(editing))editing=null;
+    selected.clear();
+    mark(true); refreshFilters(); renderList(); counts();
+    b.classList.remove('on'); say(`${nos.length}건 삭제했습니다.`);
+  };
+  $('#bacts').append(y);
+};
 
 function refreshFilters(){
   const ys=[...new Set(DB.spec.map(s=>String(s.date||'').slice(0,4)).filter(Boolean))].sort().reverse();
@@ -1342,7 +1438,7 @@ function openEntry(no){ go('entry',no||null); }
 function fillEntry(no){
   const s=no?specOf(no):null; editing=s?s.no:null;
   $('#e-title').textContent=s?`표본 ${s.no}`:'새 표본';
-  $('#e-del').style.display=s?'':'none';
+  $('#e-del').style.display=$('#e-del2').style.display=s?'':'none';
   $('#e-parent').textContent=s&&s.parent_no?`모체 ${s.parent_no}`:'';
   $('#e-split').style.display=(s&&s.preservation==='wet'&&(s.count||0)>0)?'':'none';
   $('#splitbox').style.display='none';
@@ -1407,7 +1503,8 @@ function saveRec(){
     count:Math.max(0,+$('#e-count').value||0), sex:$('#e-sex').value,
     preservation:$('#e-pres').value, method:$('#e-method').value.trim(),
     container:cont, position:pos,
-    status:entryStatus,
+    /* 종명이 하나도 없는데 '확정'이면 자동으로 미동정 처리 */
+    status:(entryStatus===''&&!$('#e-kor').value.trim()&&!$('#e-sci').value.trim())?'undet':entryStatus,
     exp:{dissect:$('#x-dissect').checked, dna:$('#x-dna').checked,
          photo:$('#x-photo').checked, note:$('#x-note').value.trim()},
     log:editLog,
@@ -1420,7 +1517,7 @@ function saveRec(){
   editing=rec.no; mark(true); refreshFilters(); renderList(); counts(); fillContList();
   siteOptions(rec.site_id);
   go('entry',rec.no,true);
-  $('#e-title').textContent=`표본 ${rec.no}`; $('#e-del').style.display='';
+  $('#e-title').textContent=`표본 ${rec.no}`; $('#e-del').style.display=$('#e-del2').style.display='';
   $('#e-split').style.display=(rec.preservation==='wet'&&rec.count>0)?'':'none';
   const bn=say(rec.container?`${rec.no} 저장 — ${rec.container}${rec.position?' '+rec.position:''} 에 들어갔습니다.`:`${rec.no} 저장했습니다.`);
   const sv=document.createElement('button'); sv.className='btn sm pri'; sv.textContent='지금 동기화';
@@ -1434,7 +1531,7 @@ $('#e-next').onclick=()=>{
   const rec=saveRec(); if(!rec)return;
   editing=null;
   try{history.replaceState(null,'','#entry');}catch(e){}
-  $('#e-title').textContent='새 표본'; $('#e-del').style.display='none';
+  $('#e-title').textContent='새 표본'; $('#e-del').style.display=$('#e-del2').style.display='none';
   $('#e-parent').textContent=''; $('#e-split').style.display='none'; $('#splitbox').style.display='none';
   $('#e-no').value=nextNo(); noHint();
   $('#e-count').value=1; $('#e-sex').value='';
@@ -1448,6 +1545,9 @@ $('#e-next').onclick=()=>{
   $('#e-search').focus();
   say(`${rec.no} 저장됨 — 같은 채집정보로 이어서 입력합니다. 종명부터 치면 됩니다.`);
 };
+$('#e-del2').onclick=()=>$('#e-del').click();
+$('#e-next2').onclick=()=>$('#e-next').click();
+$('#e-save2').onclick=()=>$('#e-save').click();
 $('#e-del').onclick=()=>{
   const b=say(`${editing} 을(를) 삭제할까요?`,'bad');
   const y=document.createElement('button'); y.className='btn sm dgr'; y.textContent='삭제';
@@ -1504,6 +1604,7 @@ function pick(r){
   if(r.endemic)F.push(['g','한국 고유종']); if(r.climate_ind)F.push(['w','기후변화지표종']);
   if(r.legal)F.push(['w','법정관리종']);
   $('#e-flags').innerHTML=F.length?F.map(([k,t])=>`<span class="tag ${k}">${t}</span>`).join(''):'<span class="hint">지정 없음</span>';
+  if(entryStatus==='undet')setStatus('');       /* 종을 골랐으면 더 이상 미동정이 아니다 */
   $('#e-search').value=''; closeAC();
 }
 
@@ -1515,6 +1616,7 @@ $('#e-sp').onclick=()=>{
   const genus=g[0].toUpperCase()+g.slice(1).toLowerCase();
   $('#e-sci').value=genus+' sp.';
   $('#e-kor').value='';                       /* 종까지 확정 안 됐으므로 국명은 비움 */
+  if(entryStatus==='undet')setStatus('');     /* 속까지는 동정한 것 */
   const hit=DB.chk.find(r=>(r.genus||'')===genus)
         ||DB.chk.find(r=>String(r.name||'').startsWith(genus+' '));
   if(hit){
@@ -1536,29 +1638,38 @@ function setStatus(v){
 $$('#e-status button').forEach(b=>b.onclick=()=>setStatus(b.dataset.st));
 
 /* 개체 분리 — 건조표본으로 */
+function spFillBoxes(){
+  const pres=$('#sp-pres').value, type=pres==='wet'?'grid':'free';
+  const boxes=allContainers().filter(c=>c.type===type);
+  $('#contdl2').innerHTML=boxes.map(c=>`<option value="${esc(c.id)}">${esc(c.label||'')}</option>`).join('');
+  $('#sp-cont').value=boxes.length?boxes[boxes.length-1].id:'';
+  $('#sp-cont').placeholder=nextContCode(type);
+}
 $('#e-split').onclick=()=>{const s=specOf(editing);if(!s)return;
   $('#splitbox').style.display=''; $('#sp-n').max=s.count||1; $('#sp-n').value=1;
-  const boxes=allContainers().filter(c=>c.type==='free');
-  $('#contdl2').innerHTML=boxes.map(c=>`<option value="${esc(c.id)}">${esc(c.label||'')}</option>`).join('');
-  $('#sp-cont').value=boxes.length?boxes[0].id:'';
-  $('#sp-cont').placeholder=nextContCode('free');
-  spPrev();};
-$('#sp-cont').addEventListener('blur',()=>{$('#sp-cont').value=boxNorm($('#sp-cont').value,'dry');});
+  $('#sp-sex').value='__same'; $('#sp-pres').value='dry';
+  $('#sp-dissect').checked=false; $('#sp-dna').checked=false;
+  spFillBoxes(); spPrev();};
+$('#sp-pres').addEventListener('change',()=>{spFillBoxes();spPrev();});
+$('#sp-cont').addEventListener('blur',()=>{$('#sp-cont').value=boxNorm($('#sp-cont').value,$('#sp-pres').value);});
 $('#sp-cancel').onclick=()=>$('#splitbox').style.display='none';
 $('#sp-n').addEventListener('input',spPrev);
 function spPrev(){const s=specOf(editing);if(!s)return;
   const n=Math.max(1,Math.min(+$('#sp-n').value||1,s.count||1));
   const start=numOf(nextNo());
-  $('#sp-prev').textContent=`${fmtNo(start)} … ${fmtNo(start+n-1)} 생성 · ${s.no} 잔량 ${s.count} → ${(s.count||0)-n}`;}
+  $('#sp-prev').textContent=`${fmtNo(start)} … ${fmtNo(start+n-1)} 생성 (${PRES[$('#sp-pres').value]}) · ${s.no} 잔량 ${s.count} → ${(s.count||0)-n}`;}
 $('#sp-go').onclick=()=>{
   const s=specOf(editing); if(!s)return;
   const n=Math.max(1,Math.min(+$('#sp-n').value||1,s.count||1));
-  const cont=boxNorm($('#sp-cont').value,'dry');
-  ensureContainer(cont,'dry');
+  const pres=$('#sp-pres').value;
+  const sex=$('#sp-sex').value==='__same'?s.sex:$('#sp-sex').value;
+  const cont=boxNorm($('#sp-cont').value,pres);
+  ensureContainer(cont,pres);
   let k=numOf(nextNo());
   for(let i=0;i<n;i++,k++){
-    DB.spec.push(normSpec({...s, no:fmtNo(k), legacy_no:null, parent_no:s.no, preservation:'dry',
-      count:1, container:cont, position:'', printed_at:null, log:[]}));
+    DB.spec.push(normSpec({...s, no:fmtNo(k), legacy_no:null, parent_no:s.no, preservation:pres,
+      count:1, sex, container:cont, position:'', printed_at:null, log:[],
+      exp:{dissect:$('#sp-dissect').checked, dna:$('#sp-dna').checked, photo:false, note:''}}));
   }
   s.count=(s.count||0)-n;
   DB.spec.sort((a,b)=>numOf(a.no)-numOf(b.no));
@@ -1815,7 +1926,7 @@ function dryLabel(s){
   <div class="lab dry"><div class="in">
     <div class="kr fit f36" style="height:57.15mm;line-height:1.15"><span>${esc(s.kor||'')}</span></div>
     <div class="it fit one f36" style="height:38.10mm;line-height:1.15"><span>${sciFmt(s.sci)}${SEX[s.sex]?' '+SEX[s.sex]:''}${
-      s.status?`<span class="rm" style="font-weight:400"> ${STATUSMARK[s.status]}</span>`:''}</span></div>
+      STATUSMARK[s.status]?`<span class="rm" style="font-weight:400"> ${STATUSMARK[s.status]}</span>`:''}</span></div>
     <div class="gp f36" style="height:19.05mm"><span>Det.</span><span class="f27">${esc(s.det_by_en||'')}</span></div>
   </div></div></div>`;
 }
@@ -1826,7 +1937,7 @@ function wetLabel(s){
     <div class="hd fit f50" style="height:35.72mm"><span>KOREA</span><span>${esc(rcode(st.region))}</span>${CFG.inst?`<span>${esc(CFG.inst)}</span>`:''}<span>${esc(s.no)}</span></div>
     <div class="kr fit f45" style="height:28.57mm">${esc(s.kor||'')}</div>
     <div class="it fit one f45" style="height:28.57mm"><span>${sciFmt(s.sci)}${
-      s.status?`<span class="rm" style="font-weight:400"> ${STATUSMARK[s.status]}</span>`:''}</span></div>
+      STATUSMARK[s.status]?`<span class="rm" style="font-weight:400"> ${STATUSMARK[s.status]}</span>`:''}</span></div>
     <div class="fit f40" style="height:42.86mm;line-height:1.15">${esc(st.locality_en||'')}</div>
     <div class="fit f45" style="height:28.57mm">${esc(dateStr(s))}</div>
     <div class="gp fit f45" style="height:28.57mm"><span>${st.lon??''}</span><span>${st.lat??''}</span></div>
@@ -1890,11 +2001,323 @@ $('#pv-in').onclick=()=>pvStep(1);
 $('#pv-out').onclick=()=>pvStep(-1);
 $('#pv-fit').onclick=()=>pvSet(null);
 $('#pv-100').onclick=()=>pvSet(1);
+/* 미리보기 위에서는 휠만 굴려도 확대·축소 (Ctrl 불필요) */
 $('#sheetwrap').addEventListener('wheel',e=>{
-  if(!e.ctrlKey&&!e.metaKey)return;
   e.preventDefault(); pvStep(e.deltaY<0?1:-1);
 },{passive:false});
 window.addEventListener('resize',fitPreview);
+
+/* ═══════════ 지도 — 채집지점을 좌표로 한눈에 ═══════════
+   Leaflet + OpenStreetMap. CDN이 안 닿는 곳(오프라인 파일)에서는
+   배경지도 없이 좌표 산점도로 대체된다. 휠 = 확대·축소, 끌기 = 이동. */
+let MAP=null, mapMarks={}, fbState=null;
+const genusOf=s=>{const w=String(s.sci||'').trim().split(/\s+/)[0]||'';return /^[A-Z][a-z]/.test(w)?w:'';};
+
+function mapOptions(){
+  const fa=$('#m-fam').value, ge=$('#m-gen').value;
+  const fams=[...new Set(DB.spec.map(s=>s.family_ko||s.family_la).filter(Boolean))].sort();
+  $('#m-fam').innerHTML='<option value="">과 전체</option>'+fams.map(f=>
+    `<option ${f===fa?'selected':''}>${esc(f)}</option>`).join('');
+  const pool=DB.spec.filter(s=>!$('#m-fam').value||(s.family_ko||s.family_la)===$('#m-fam').value);
+  const gens=[...new Set(pool.map(genusOf).filter(Boolean))].sort();
+  $('#m-gen').innerHTML='<option value="">속 전체</option>'+gens.map(g=>
+    `<option ${g===ge?'selected':''}>${esc(g)}</option>`).join('');
+}
+const mapSpecs=()=>DB.spec.filter(s=>
+  (!$('#m-fam').value||(s.family_ko||s.family_la)===$('#m-fam').value)&&
+  (!$('#m-gen').value||genusOf(s)===$('#m-gen').value));
+
+/* 배경지도 두 벌 — 일반(OSM)과 위성(Esri World Imagery) */
+const baseLayers=()=>({
+  '일반':L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    {maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}),
+  '위성':L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    {maxZoom:19,attribution:'Tiles &copy; Esri'})
+});
+function mapInit(){
+  if(MAP||!window.L)return;
+  MAP=L.map('map',{scrollWheelZoom:true,zoomSnap:.5}).setView([36.3,127.9],7);
+  const base=baseLayers(); base['일반'].addTo(MAP);
+  L.control.layers(base,null,{position:'topright'}).addTo(MAP);
+  MAP._lg=L.layerGroup().addTo(MAP);
+}
+/* 지도 밑 좌표 줄 */
+function coordLine(st){
+  return `${siteText(st)} — ${st.lon??'?'}, ${st.lat??'?'} · 고도 ${st.elev??'?'} m`
+    +(st.locality_en?` · ${st.locality_en}`:'');
+}
+function mapShow(siteId){ mapOptions(); mapRender(siteId); }
+
+function popupHTML(st,e){
+  const sp=[...e.sp.entries()].sort((a,b)=>b[1]-a[1]);
+  return `<b>${esc(siteText(st))}</b><br>`
+    +`<span style="color:#666">${esc(st.locality_en||'')}${st.elev!=null?' · '+st.elev+'m':''}</span><br>`
+    +`표본 ${e.n}건 · ${e.ind}개체<hr style="border:0;border-top:1px solid #eee;margin:5px 0">`
+    +sp.slice(0,5).map(a=>`${esc(a[0])} <span style="color:#888">${a[1]}</span>`).join('<br>')
+    +(sp.length>5?`<br><span style="color:#888">외 ${sp.length-5}종</span>`:'');
+}
+function mapRender(focus){
+  const specs=mapSpecs();
+  const bySite=new Map();
+  specs.forEach(s=>{ if(!s.site_id)return;
+    const e=bySite.get(s.site_id)||{n:0,ind:0,sp:new Map()};
+    e.n++; e.ind+=s.count||0;
+    const k=(s.kor||s.sci||'(미동정)')+(s.status==='undet'?'':'');
+    e.sp.set(k,(e.sp.get(k)||0)+(s.count||1));
+    bySite.set(s.site_id,e); });
+  const nocoord=[], pts=[];
+  const filterOn=!!($('#m-fam').value||$('#m-gen').value);
+  mapSummary(specs,bySite);
+  $('#m-info').textContent=`${specs.length}건 · 지점 ${bySite.size}곳`;
+
+  if(window.L){
+    mapInit(); MAP._lg.clearLayers(); mapMarks={};
+    if(filterOn) /* 필터 밖 지점은 회색 점으로 남겨 맥락을 준다 */
+      DB.site.forEach(st=>{ if(st.lon==null||st.lat==null||bySite.has(st.site_id))return;
+        L.circleMarker([st.lat,st.lon],{radius:3,color:'#999',weight:1,fillColor:'#ccc',fillOpacity:.5})
+          .addTo(MAP._lg).bindTooltip(siteText(st)); });
+    bySite.forEach((e,id)=>{ const st=siteOf(id);
+      if(!st)return; if(st.lon==null||st.lat==null){nocoord.push(st);return;}
+      const m=L.circleMarker([st.lat,st.lon],
+        {radius:Math.min(17,4.5+Math.sqrt(e.ind)*1.5),color:'#0969da',weight:1.5,
+         fillColor:'#54aeff',fillOpacity:.55})
+        .addTo(MAP._lg).bindPopup(popupHTML(st,e));
+      m.on('click',()=>{$('#m-coord').textContent=coordLine(st);});
+      mapMarks[id]=m; pts.push([st.lat,st.lon]); });
+    setTimeout(()=>{ MAP.invalidateSize();
+      if(focus&&mapMarks[focus]){MAP.setView(mapMarks[focus].getLatLng(),Math.max(MAP.getZoom(),11));mapMarks[focus].openPopup();
+        const st=siteOf(focus); if(st)$('#m-coord').textContent=coordLine(st);}
+      else if(pts.length)MAP.fitBounds(pts,{padding:[36,36],maxZoom:11});
+    },60);
+  }else{
+    bySite.forEach((e,id)=>{const st=siteOf(id);
+      if(st&&(st.lon==null||st.lat==null))nocoord.push(st);});
+    fbRender(bySite,focus);
+  }
+  $('#m-nocoord').textContent=nocoord.length
+    ?`좌표가 없어 지도에 못 찍은 지점 ${nocoord.length}곳: ${nocoord.map(siteText).join(' · ')} — 채집지점에 경도·위도를 넣으면 나타납니다.`:'';
+}
+$('#m-fam').addEventListener('change',()=>{$('#m-gen').value='';mapOptions();mapRender();});
+$('#m-gen').addEventListener('change',()=>mapRender());
+$('#m-all').onclick=()=>{$('#m-fam').value='';$('#m-gen').value='';mapOptions();mapRender();};
+
+/* 요약 — 지금 화면(과·속 필터)에 잡힌 표본으로 계산 */
+function mapSummary(specs,bySite){
+  const el=$('#mapsum');
+  if(!specs.length){el.innerHTML='<span class="hint">해당하는 표본이 없습니다.</span>';return;}
+  const ind=x=>x.reduce((a,s)=>a+(s.count||0),0);
+  const M=specs.filter(s=>s.sex==='M'), F=specs.filter(s=>s.sex==='F'), U=specs.filter(s=>!s.sex);
+  const span=x=>{ const ds=x.flatMap(s=>[s.date,s.date2]).filter(Boolean)
+      .map(d=>[fromRoman(d),d]).filter(a=>a[0]).sort((a,b)=>a[0]<b[0]?-1:1);
+    if(!ds.length)return'날짜 기록 없음';
+    return ds[0][1]+(ds[ds.length-1][1]!==ds[0][1]?` ~ ${ds[ds.length-1][1]}`:''); };
+  const months=x=>{ const c={};
+    x.forEach(s=>{const iso=fromRoman(s.date);if(!iso)return;const m=+iso.slice(5,7);c[m]=(c[m]||0)+(s.count||1);});
+    const top=Object.entries(c).sort((a,b)=>b[1]-a[1]).slice(0,2).map(a=>RN[+a[0]]);
+    return top.length?`주로 ${top.join('·')}월`:''; };
+  const sexRow=(mark,x)=>x.length
+    ?`<div><span class="fl">${mark} — ${ind(x)}개체 · ${x.length}건</span>${esc(span(x))}
+       <span class="hint">${months(x)}</span></div>`
+    :`<div><span class="fl">${mark}</span><span class="hint">기록 없음</span></div>`;
+  const sids=[...bySite.keys()];
+  const els=sids.map(siteOf).filter(s=>s&&s.elev!=null).map(s=>s.elev).sort((a,b)=>a-b);
+  const elev=els.length
+    ?`${els[0]} ~ ${els[els.length-1]} m${els.length>2?` · 중앙값 ${els[Math.floor(els.length/2)]} m`:''}`:'기록 없음';
+  const reg={};
+  specs.forEach(s=>{const st=siteOf(s.site_id);if(!st)return;const r=st.region||'기타';reg[r]=(reg[r]||0)+(s.count||1);});
+  const rr=Object.entries(reg).sort((a,b)=>b[1]-a[1]);
+  const regTxt=rr.length?rr.slice(0,4).map(a=>`${a[0]} ${a[1]}`).join(' · ')+(rr.length>4?` 외 ${rr.length-4}지역`:''):'—';
+  el.innerHTML=`<div class="grid g2" style="gap:12px 26px">
+    <div><span class="fl">표본</span>${specs.length}건 · ${ind(specs)}개체 · 지점 ${sids.length}곳</div>
+    <div><span class="fl">지역 — 개체수 순</span>${esc(regTxt)}</div>
+    ${sexRow('♂ 수컷',M)}${sexRow('♀ 암컷',F)}
+    <div><span class="fl">고도 (지점 기준)</span>${esc(elev)}</div>
+    ${U.length?`<div><span class="fl">성별 미상</span>${ind(U)}개체 · ${U.length}건</div>`:''}
+  </div>`;
+}
+
+/* CDN 없이 열었을 때의 대체 지도 — 좌표 산점도. 휠 확대·끌기 이동은 동일 */
+function fbRender(bySite,focus){
+  const box=$('#map');
+  const items=[...bySite.entries()].map(([id,e])=>({st:siteOf(id),e}))
+    .filter(x=>x.st&&x.st.lon!=null&&x.st.lat!=null);
+  if(!items.length){box.innerHTML='<p class="hint" style="padding:20px">좌표 있는 지점이 없습니다.</p>';return;}
+  const K=Math.cos(36.5*Math.PI/180);
+  const xs=items.map(i=>i.st.lon*K*111), ys=items.map(i=>-i.st.lat*111);
+  let x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);
+  const pad=Math.max((x1-x0),(y1-y0),40)*.12; x0-=pad;x1+=pad;y0-=pad;y1+=pad;
+  if(!fbState)fbState={x:x0,y:y0,w:x1-x0,h:y1-y0};
+  const S=fbState; S.x=x0;S.y=y0;S.w=x1-x0;S.h=y1-y0;
+  box.innerHTML=`<svg class="fb" viewBox="${S.x} ${S.y} ${S.w} ${S.h}" preserveAspectRatio="xMidYMid meet">
+    <g id="fbg">${items.map((it,i)=>{
+      const x=it.st.lon*K*111, y=-it.st.lat*111, r=Math.min(14,3+Math.sqrt(it.e.ind)*1.2);
+      return `<circle data-i="${i}" cx="${x}" cy="${y}" r="${r}" fill="#54aeff" fill-opacity=".55"
+        stroke="#0969da" stroke-width="1" style="cursor:pointer"></circle>`;}).join('')}</g></svg>
+    <span class="fb-note">배경지도를 불러오지 못해 좌표만 표시합니다 (휠 확대 · 끌기 이동)</span>
+    <div id="fb-info"></div>`;
+  const svg=box.querySelector('svg');
+  const apply=()=>svg.setAttribute('viewBox',`${S.x} ${S.y} ${S.w} ${S.h}`);
+  svg.addEventListener('wheel',e=>{ e.preventDefault();
+    const f=e.deltaY<0?1/1.25:1.25, r=svg.getBoundingClientRect();
+    const mx=S.x+(e.clientX-r.left)/r.width*S.w, my=S.y+(e.clientY-r.top)/r.height*S.h;
+    S.x=mx-(mx-S.x)*f; S.y=my-(my-S.y)*f; S.w*=f; S.h*=f; apply(); },{passive:false});
+  /* setPointerCapture를 쓰면 click 대상이 svg로 바뀌어 원 클릭이 죽는다 — 캡처 없이 끈다 */
+  let drag=null;
+  svg.addEventListener('pointerdown',e=>{drag=[e.clientX,e.clientY];});
+  svg.addEventListener('pointermove',e=>{ if(!drag)return; const r=svg.getBoundingClientRect();
+    S.x-=(e.clientX-drag[0])/r.width*S.w; S.y-=(e.clientY-drag[1])/r.height*S.h;
+    drag=[e.clientX,e.clientY]; apply(); });
+  svg.addEventListener('pointerup',()=>drag=null);
+  svg.querySelectorAll('circle[data-i]').forEach(c=>c.onclick=()=>{
+    const it=items[+c.dataset.i], d=$('#fb-info');
+    d.innerHTML=popupHTML(it.st,it.e); d.style.display='block';
+    $('#m-coord').textContent=coordLine(it.st);
+  });
+  if(focus){const i=items.findIndex(x=>x.st.site_id===focus);
+    if(i>=0){const d=$('#fb-info');d.innerHTML=popupHTML(items[i].st,items[i].e);d.style.display='block';}}
+}
+
+/* ═══════════ 검색 — 표본 한 건의 이력서 ═══════════
+   번호(대충 쳐도 됨)·구번호·종명·채집지로 찾고, 채집·계보·보관·실험·기록을
+   미니 지도와 함께 한 화면에 모아 보여준다. */
+let FMAP=null, fqT=null;
+function findShow(no){
+  if(no&&specOf(no)){$('#fq').value=no;renderDossier(no);}
+  else setTimeout(()=>{if(innerWidth>760)$('#fq').focus();},0);
+}
+function fqNorm(v){
+  const m=/^(?:jh)?\s*0*(\d{1,6})$/i.exec(String(v).trim());
+  return m?fmtNo(+m[1]):null;
+}
+$('#fq').addEventListener('input',()=>{clearTimeout(fqT);fqT=setTimeout(fqSearch,130);});
+$('#fq').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){const first=$('#fq-list .ac-item[data-no]');if(first)first.click();}
+  else if(e.key==='Escape')$('#fq-list').classList.remove('on');
+});
+function fqPick(no){
+  $('#fq-list').classList.remove('on'); $('#fq').value=no;
+  go('find',no,true); renderDossier(no);
+}
+function fqSearch(){
+  const v=$('#fq').value.trim(), L=$('#fq-list');
+  if(!v){L.classList.remove('on');return;}
+  const norm=fqNorm(v);
+  if(norm&&specOf(norm)){fqPick(norm);return;}
+  const q=v.toLowerCase();
+  const hits=DB.spec.filter(s=>{
+    const st=siteOf(s.site_id);
+    return [s.no,s.legacy_no,s.kor,s.sci,s.family_ko,st&&st.locality_ko,st&&st.region]
+      .some(x=>String(x||'').toLowerCase().includes(q));
+  }).slice(0,15);
+  if(!hits.length){
+    L.innerHTML='<div class="ac-item" style="cursor:default"><span class="m">일치하는 표본이 없습니다.</span></div>';
+    L.classList.add('on');return;
+  }
+  L.innerHTML=hits.map(s=>`<div class="ac-item" data-no="${esc(s.no)}">
+    <b class="mono">${esc(s.no)}</b> ${esc(s.kor||'')} <span class="sci">${sciFmt(s.sci)}</span>
+    <span class="m">${esc(dateStr(s))} · ${esc((siteOf(s.site_id)||{}).region||'')}</span></div>`).join('');
+  L.classList.add('on');
+  $$('#fq-list .ac-item[data-no]').forEach(d=>d.onclick=()=>fqPick(d.dataset.no));
+}
+const expShort=s=>{const t=[];if(s.exp.dissect)t.push('해부');if(s.exp.dna)t.push('DNA');
+  if(s.exp.photo)t.push('사진');return t.length?' · '+t.join('·'):'';};
+
+function miniMap(st){
+  if(FMAP){FMAP.remove();FMAP=null;}
+  if(!window.L||!st||st.lon==null||st.lat==null||!$('#fmap'))return;
+  FMAP=L.map('fmap',{scrollWheelZoom:true}).setView([st.lat,st.lon],12);
+  const base=baseLayers(); base['일반'].addTo(FMAP);
+  L.control.layers(base,null,{position:'topright'}).addTo(FMAP);
+  L.circleMarker([st.lat,st.lon],{radius:8,color:'#0969da',weight:2,fillColor:'#54aeff',fillOpacity:.6})
+    .addTo(FMAP).bindTooltip(siteText(st));
+  setTimeout(()=>FMAP&&FMAP.invalidateSize(),60);
+}
+
+function renderDossier(no){
+  const s=specOf(no), D=$('#dossier');
+  if(!s){D.innerHTML='<p class="hint" style="margin-top:14px">해당 번호의 표본이 없습니다.</p>';return;}
+  const st=siteOf(s.site_id), lo=loanOpen(s);
+  /* 계보 — 모체를 따라 올라가고, 아래로는 분리된 개체들 */
+  let root=s; const seen=new Set();
+  while(root.parent_no&&specOf(root.parent_no)&&!seen.has(root.parent_no)){seen.add(root.parent_no);root=specOf(root.parent_no);}
+  const kids=DB.spec.filter(x=>x.parent_no===s.no);
+  const sibs=s.parent_no?DB.spec.filter(x=>x.parent_no===s.parent_no&&x.no!==s.no):[];
+  const rootKids=DB.spec.filter(x=>x.parent_no===root.no);
+  const famInd=(root.count||0)+rootKids.reduce((a,x)=>a+(x.count||0),0);
+
+  const link=x=>`<a class="lnk mono" data-d="${esc(x.no)}">${esc(x.no)}</a>
+    <span class="hint">(${PRES[x.preservation]||''} ${SEX[x.sex]||''}${x.count||0}개체${expShort(x)})</span>`;
+  const kin=[];
+  if(s.parent_no)kin.push(`모체 ${specOf(s.parent_no)?link(specOf(s.parent_no)):`<span class="mono">${esc(s.parent_no)}</span>`} 에서 분리된 개체입니다.`);
+  if(kids.length)kin.push(`이 표본에서 분리: ${kids.map(link).join(' · ')}`);
+  if(sibs.length)kin.push(`같은 모체에서 분리된 형제: ${sibs.map(link).join(' · ')}`);
+  if(rootKids.length)kin.push(`계보 전체 — 원 tube ${root.no===s.no?'(이 표본)':`<a class="lnk mono" data-d="${esc(root.no)}">${esc(root.no)}</a>`}
+    잔량 ${root.count||0} + 분리 ${rootKids.length}건 = 총 ${famInd}개체`);
+
+  const tags=[];
+  if(s.status)tags.push(`<span class="tag ${s.status==='undet'?'':'w'}">${STATUS[s.status]}</span>`);
+  if(lo)tags.push(`<span class="tag r" title="${esc(lo.text||'')}">대여중</span>`);
+
+  const expTxt=[s.exp.dissect?'해부(생식기 슬라이드)':'',s.exp.dna?'DNA 추출':'',s.exp.photo?'사진 촬영':''].filter(Boolean).join(' · ');
+  const keep=[PRES[s.preservation]||'',SEX[s.sex]?SEX[s.sex]+' ':'',`${s.count||0}개체`,
+    s.container?`— ${s.container}${s.position?' '+s.position:''}`:'— 보관함 미지정'].join(' ');
+
+  /* 일지 — 기록 + 동정일 + 라벨 출력을 시간순으로 합친다 */
+  const tl=[];
+  (s.log||[]).forEach(l=>tl.push({d:l.date||'',k:LTYPE[l.type]||l.type||'메모',t:l.text||'',c:l.type==='loan'?'r':l.type==='return'?'g':''}));
+  if(s.det_date)tl.push({d:s.det_date,k:'동정',t:[s.det_by,s.det_note].filter(Boolean).join(' — '),c:'b'});
+  if(s.printed_at)tl.push({d:String(s.printed_at).slice(0,10),k:'라벨 출력',t:'',c:'g'});
+  tl.sort((a,b)=>a.d<b.d?1:a.d>b.d?-1:0);
+
+  D.innerHTML=`
+  <div class="card">
+    <div class="card-h" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span class="mono" style="font-size:16px">${esc(s.no)}</span>
+      ${s.legacy_no?`<span class="hint">(구 ${esc(s.legacy_no)})</span>`:''}
+      <span>${esc(s.kor||'')}</span><span class="sci">${sciFmt(s.sci)}</span>${tags.join('')}
+      <div class="grow"></div>
+      <button class="btn sm" id="d-edit">편집</button>
+      ${st?`<button class="btn sm" id="d-map">큰 지도에서</button>`:''}
+    </div>
+    <div class="card-b">
+      <div class="grid g2" style="gap:16px 26px;align-items:start">
+        <div style="display:grid;gap:11px">
+          <div><span class="fl">채집</span>${esc(dateStr(s))}${s.method?` · ${esc(s.method)}`:''}${s.collector?` · ${esc(s.collector)}`:''}</div>
+          <div><span class="fl">채집지</span>${st?`${esc(siteText(st))}<br>
+            <span class="hint">${esc(st.locality_en||'')}${st.region?` · 라벨 ${esc(rcode(st.region))}`:''}</span>`:'<span class="hint">지점 정보 없음</span>'}</div>
+          <div><span class="fl">보존 · 보관</span>${esc(keep)}</div>
+          <div><span class="fl">동정</span>${s.det_by?`${esc(s.det_by)}${s.det_date?` · ${esc(s.det_date)}`:''}`:'<span class="hint">기록 없음</span>'}
+            ${s.det_note?`<br><span class="hint">${esc(s.det_note)}</span>`:''}</div>
+          <div><span class="fl">실험</span>${expTxt||'<span class="hint">한 것 없음</span>'}
+            ${s.exp.note?`<br><span class="hint">${esc(s.exp.note)}</span>`:''}</div>
+          ${kin.length?`<div><span class="fl">계보</span><div style="display:grid;gap:4px">${kin.map(k=>`<div>${k}</div>`).join('')}</div></div>`:''}
+        </div>
+        <div>
+          ${st&&st.lon!=null&&window.L?`<div id="fmap"></div>
+            <p class="hint" style="margin-top:6px">${esc(coordLine(st))}</p>`
+          :st&&st.lon!=null?`<p class="hint">${esc(coordLine(st))}</p>`
+          :`<p class="hint">이 지점은 좌표가 없어 지도를 표시할 수 없습니다.</p>`}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-h">일지 <span class="subtiny" style="font-weight:400">— 기록 · 동정 · 라벨 출력을 시간순으로</span></div>
+    <div class="card-b" style="padding:0">
+      <div class="tbl-wrap" style="border:0"><table>
+        <thead><tr><th style="width:110px">날짜</th><th style="width:100px" class="c">종류</th><th>내용</th></tr></thead>
+        <tbody>${tl.length?tl.map(e=>`<tr><td class="mono c">${esc(e.d)}</td>
+          <td class="c"><span class="tag ${e.c}">${esc(e.k)}</span></td><td>${esc(e.t)}</td></tr>`).join('')
+          :'<tr><td colspan="3" style="padding:16px;text-align:center;color:var(--mut)">기록이 없습니다 — 실험·대여는 표본입력의 ⑤기록에 날짜와 함께 남기면 여기에 쌓입니다.</td></tr>'}</tbody>
+      </table></div>
+    </div>
+  </div>`;
+  $('#d-edit').onclick=()=>openEntry(s.no);
+  if($('#d-map'))$('#d-map').onclick=()=>go('map',s.site_id);
+  $$('#dossier [data-d]').forEach(a=>a.onclick=()=>fqPick(a.dataset.d));
+  miniMap(st);
+}
+
 function applyK(){
   const m=parseFloat($('#p-meas').value)||100, k=100/m;
   document.documentElement.style.setProperty('--k',k);
