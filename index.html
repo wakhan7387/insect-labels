@@ -150,6 +150,8 @@ td.c,th.c{text-align:center}
 .rm{font-style:normal;font-weight:inherit}
 .lnk{color:var(--accent);cursor:pointer;text-decoration:none;font-weight:600}
 .lnk:hover{text-decoration:underline}
+/* 표본목록 안에서는 링크도 평범한 검정 글씨 — 호버하면 밑줄로만 표가 난다 */
+#tbl .lnk{color:var(--fg);font-weight:400}
 input.cell{border-color:transparent;background:transparent;padding:3px 6px}
 input.cell:hover{border-color:var(--border)}
 input.cell:focus{background:var(--canvas)}
@@ -502,7 +504,7 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
       <div class="rowflex" style="margin-bottom:10px">
         <div class="seg" id="sp-mode">
           <button data-m="split">분리 — 새 번호 부여</button>
-          <button data-m="conv">보존 전환 — 번호 유지</button>
+          <button data-m="conv">전환 — 번호 유지</button>
         </div>
       </div>
       <p class="hint" style="margin-bottom:10px"><b>분리</b>는 여러 개체 중 일부를 꺼내 새 번호를 주는 것
@@ -704,7 +706,7 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
 <!-- ══ 검색 — 표본 한 건의 모든 것 ══ -->
 <section class="view" id="v-find">
   <div class="card"><div class="card-b">
-    <label class="fl">채집번호를 입력하십시오 — jh1 처럼 대충 쳐도 되고, 구번호(LJH…)·종명·채집지로도 찾아집니다</label>
+    <label class="fl">채집번호 또는 종명을 입력하세요 — 번호는 jh1 처럼 대충 쳐도 되고, 구번호(LJH…)·채집지로도 찾아집니다</label>
     <input type="text" id="fq" placeholder="JH000001" autocomplete="off" class="mono">
     <div class="ac-list" id="fq-list"></div>
   </div></div>
@@ -808,7 +810,7 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const sciFmt=s=>esc(s).replace(/([()])/g,'<span class="rm">$1</span>');
 
 /* ─────── 상태 ─────── */
-const BUILD='2026-08-28 · v23';
+const BUILD='2026-08-28 · v24';
 const DB={spec:[],site:[],chk:[],cont:[]};
 const SHA={};
 let CFG={owner:'',repo:'',branch:'main',store:'local',token:'',
