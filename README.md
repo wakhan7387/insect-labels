@@ -1,13 +1,13 @@
 # 곤충 표본 라벨 시스템 — 설치 순서
 
-파일 세 개로 돌아갑니다. `index.html`이 앱 전체이고, 나머지는 자료입니다.
+파일 세 개로 돌아갑니다. `index.html`이 앱 전체이고, 나머지는 개인 자료입니다.
 
 ```
 insect-labels/            ← 공개 저장소 (GitHub Pages)
   index.html
   data/checklist.jsonl    ← 국가생물종목록. 공개 자료라 여기 둡니다
 
-insect-collection-data/   ← 비공개 저장소
+insect-collection-data/   ← 비공개 저장소(개인 표본 라벨용입니다~ )
   data/specimens.jsonl
   data/sites.jsonl
   data/containers.jsonl
