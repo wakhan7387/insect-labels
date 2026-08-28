@@ -30,7 +30,9 @@ button,input,select,textarea{font:inherit;color:inherit}
 /* ── 검정 헤더 ── */
 .ghdr{background:var(--header);color:var(--header-fg)}
 .ghdr .inner{max-width:1360px;margin:0 auto;padding:12px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-.ghdr .t{font-size:15px;font-weight:600}
+.ghdr .t{font-size:15px;font-weight:600;background:none;border:0;padding:4px 8px;margin-left:-8px;
+  border-radius:6px;color:inherit;cursor:pointer;text-align:left}
+.ghdr .t:hover{background:rgba(255,255,255,.12)}
 .ghdr .t small{color:var(--header-mut);font-weight:400;margin-left:9px;font-size:12px}
 .ghdr .sp{flex:1}
 #cnt{color:var(--header-mut);font-size:12px}
@@ -92,6 +94,12 @@ textarea{resize:vertical;min-height:54px}
   input[type=text],input[type=number],input[type=date],select,textarea{font-size:16px;padding:9px 11px}
   .btn{padding:8px 14px}
   .btn.sm{padding:5px 10px}
+  /* 지점 선택기 — 손가락으로 누를 크기로 */
+  .pick-btn{min-height:44px;font-size:16px}
+  .pick-i{padding:10px 8px;font-size:15px}
+  .pick-chip{line-height:26px;font-size:13px;padding:0 11px}
+  .pick-list{max-height:46vh}
+  .pick-new{padding:10px;font-size:14px}
   /* 표는 가로 스크롤로 읽는다 */
   #tbl th,#tbl td{white-space:nowrap;padding:9px 10px}
   #tbl td:nth-child(3){white-space:normal;min-width:170px}
@@ -108,13 +116,11 @@ textarea{resize:vertical;min-height:54px}
   .mini{max-width:100%}
   .mini .bc{font-size:10px}
   .boxgrid{max-width:100%!important}
-  /* 라벨 미리보기는 화면 폭에 맞춰 축소해서 보여준다(인쇄는 영향 없음) */
-  #sheet{width:210mm;transform:scale(var(--pv,1));transform-origin:0 0;margin:14px 0 0}
-  #sheetwrap{overflow:hidden}
+  .pvbar .hint:last-child{display:none}
   .banner{left:10px;right:10px;transform:none;max-width:none;bottom:10px;flex-wrap:wrap}
   footer .inner{padding:14px 12px;gap:8px}
 }
-@media print{ #sheet{transform:none!important} }
+@media print{ #sheet{zoom:1!important} #sheetwrap{overflow:visible} }
 
 .btn{background:var(--subtle);border:1px solid rgba(31,35,40,.15);padding:5px 14px;border-radius:6px;
   cursor:pointer;font-size:13.5px;font-weight:500;white-space:nowrap;color:var(--fg)}
@@ -161,6 +167,49 @@ input.cell:focus{background:var(--canvas)}
 .ac-item b{font-weight:600}
 .ac-item .m{color:var(--mut);font-size:11.5px}
 
+/* 검색형 선택기 — 항목이 수백 개가 되어도 스크롤로 뒤지지 않는다 */
+.pick{position:relative}
+.pick-btn{width:100%;display:flex;align-items:center;gap:8px;text-align:left;
+  padding:5px 10px;min-height:32px;border:1px solid var(--border);border-radius:6px;
+  background:var(--canvas);font-size:13px;cursor:pointer}
+.pick-btn:hover{border-color:var(--mut2)}
+.pick-btn .t{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pick-btn .t.ph{color:var(--mut2)}
+.pick-btn .c{color:var(--mut2);font-size:10px;flex:none}
+.pick.on .pick-btn{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-l)}
+.pick-pop{display:none;position:absolute;z-index:60;left:0;right:auto;top:calc(100% + 4px);
+  width:max(100%,370px);max-width:calc(100vw - 30px);
+  background:var(--canvas);border:1px solid var(--border);border-radius:6px;
+  box-shadow:0 8px 24px rgba(31,35,40,.16);padding:8px}
+.pick.on .pick-pop{display:block}
+.pick-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.pick-chip{font-size:11.5px;line-height:20px;padding:0 9px;border-radius:2em;cursor:pointer;
+  border:1px solid var(--border);background:var(--subtle);color:var(--mut);white-space:nowrap}
+.pick-chip.on{background:var(--fg);color:var(--canvas);border-color:var(--fg)}
+.pick-list{max-height:252px;overflow:auto;margin-top:8px;border-top:1px solid var(--border-2)}
+.pick-h{font-size:11px;color:var(--mut2);padding:8px 8px 3px}
+.pick-i{padding:6px 8px;border-radius:5px;cursor:pointer;font-size:13px;
+  display:flex;gap:8px;align-items:baseline}
+.pick-i:hover,.pick-i.sel{background:var(--accent-l)}
+.pick-i .rg{color:var(--mut);font-size:11.5px;flex:none}
+.pick-i .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pick-i .m{color:var(--mut2);font-size:11px;margin-left:auto;flex:none}
+.pick-none{padding:9px 8px;font-size:12.5px;color:var(--mut);line-height:1.5}
+.pick-new{width:100%;margin-top:8px;padding:7px;border:1px dashed var(--border);border-radius:6px;
+  background:transparent;font-size:12.5px;color:var(--accent);cursor:pointer;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pick-new:hover{background:var(--accent-l);border-color:var(--accent)}
+/* 같은 날짜에 쓴 지점 — 입력칸 바로 밑에 눌러 고를 수 있게 깔린다 */
+.daysite{display:none;flex-wrap:wrap;gap:5px;align-items:center;margin-top:10px}
+.daysite.on{display:flex}
+.daysite .lb{font-size:11.5px;color:var(--mut2);flex:none}
+.daysite button{font-size:11.5px;line-height:20px;padding:0 9px;border-radius:2em;cursor:pointer;
+  border:1px solid var(--border);background:var(--subtle);color:var(--fg);
+  max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.daysite button:hover{border-color:var(--accent);background:var(--accent-l);color:var(--accent)}
+.daysite button.on{background:var(--fg);color:var(--canvas);border-color:var(--fg)}
+.daysite button.nw{border-style:dashed;color:var(--accent)}
+
 /* 보관함 격자 */
 .boxgrid{display:grid;gap:3px}
 .bc{aspect-ratio:1;border:1px solid var(--border);border-radius:3px;background:var(--canvas);
@@ -174,7 +223,14 @@ input.cell:focus{background:var(--canvas)}
 .mini .bc{font-size:8.5px}
 
 /* ── 라벨 (인쇄 기하 — 검증 완료, 임의 수정 금지) ── */
-#sheet{background:#fff;color:#000;padding:10mm;border:1px solid var(--border);border-radius:6px;margin:14px auto 0;width:210mm;max-width:100%}
+#sheet{background:#fff;color:#000;padding:10mm;border:1px solid var(--border);border-radius:6px;
+  margin:0 auto;width:210mm;zoom:var(--pv,1)}
+#sheetwrap{overflow:auto;margin-top:8px}
+/* 미리보기 배율 막대 */
+.pvbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:14px}
+.pvbar #pv-n{min-width:52px;text-align:center;font-size:12.5px;color:var(--mut)}
+.pvbar .btn.on{background:var(--fg);color:var(--canvas);border-color:var(--fg)}
+.pvbar .hint:last-child{margin-left:6px}
 .lgrid{display:flex;flex-wrap:wrap;align-content:flex-start}
 .set{width:calc(20.002mm*var(--k))}
 .lab{position:relative;overflow:hidden}
@@ -228,7 +284,7 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
 </style></head><body>
 
 <div class="ghdr noprint"><div class="inner">
-  <span class="t">곤충 표본 관리<small>specimen &amp; label database</small></span>
+  <button type="button" class="t" id="home" title="표본목록으로 — 검색·필터를 지우고 새로 그립니다">곤충 표본 관리<small>specimen &amp; label database</small></button>
   <span class="sp"></span>
   <span id="cnt"></span>
   <span id="status">불러오지 않음</span>
@@ -305,7 +361,18 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
 
     <h3><span class="stepn">1</span>채집 <span class="subtiny">언제 · 어디서 · 어떻게</span></h3>
     <div class="grid g4">
-      <div><label class="fl">채집지점</label><select id="e-site"></select>
+      <div><label class="fl">채집지점</label>
+        <div class="pick" id="site-pick">
+          <input type="hidden" id="e-site">
+          <button type="button" class="pick-btn" id="site-btn">
+            <span class="t ph" id="site-btn-t">— 지점 선택 —</span><span class="c">▼</span></button>
+          <div class="pick-pop" id="site-pop">
+            <input type="text" id="site-q" placeholder="지점 검색 — 지역·한글·영문·메모" autocomplete="off">
+            <div class="pick-chips" id="site-chips"></div>
+            <div class="pick-list" id="site-list"></div>
+            <button type="button" class="pick-new" id="site-new">＋ 새 지점 입력</button>
+          </div>
+        </div>
         <span class="hint" id="e-siteinfo"></span></div>
       <div><label class="fl">채집일 (시작)</label><input type="date" id="e-date"></div>
       <div><label class="fl">종료일 — 트랩 회수일, 하루면 비움</label><input type="date" id="e-date2"></div>
@@ -317,6 +384,8 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
           <option value="BE">베이팅</option><option value="HC">직접채집</option>
         </datalist></div>
     </div>
+
+    <div class="daysite" id="site-day"></div>
 
     <div id="newsite" style="margin-top:12px;border:1px dashed var(--border);border-radius:6px;padding:12px 14px;display:none">
       <p class="hint" style="margin-bottom:10px"><b>새 채집지점</b> — 한글 주소를 넣으면 영문 표기가 자동 생성되고, 표본을 저장하면 지점도 함께 등록되어 다음부터 목록에 뜹니다.</p>
@@ -534,6 +603,15 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
     </div>
   </div>
 
+  <div class="pvbar noprint">
+    <span class="hint">미리보기</span>
+    <button class="btn sm mono" id="pv-out" title="축소 (Ctrl + 휠 아래)">−</button>
+    <span class="mono" id="pv-n">100%</span>
+    <button class="btn sm mono" id="pv-in" title="확대 (Ctrl + 휠 위)">＋</button>
+    <button class="btn sm" id="pv-fit">화면 맞춤</button>
+    <button class="btn sm" id="pv-100">실제 크기</button>
+    <span class="hint">화면에서 크게 볼 뿐, 인쇄 크기는 달라지지 않습니다.</span>
+  </div>
   <div id="sheetwrap"><div id="sheet"><div id="sheetin"></div></div></div>
 </section>
 
@@ -759,6 +837,16 @@ window.addEventListener('popstate',fromHash);
 window.addEventListener('hashchange',()=>{if(!histOK)fromHash();});
 $$('.gnb button[data-v]').forEach(b=>b.onclick=()=>go(b.dataset.v));
 
+/* 머리글의 제목 = 홈 — 표본목록으로 돌아가며 검색·필터를 지우고 다시 그린다 */
+$('#home').onclick=()=>{
+  $('#q').value='';
+  ['#f-pres','#f-year','#f-fam','#f-status','#f-exp'].forEach(x=>$(x).value='');
+  $('#f-unp').checked=false; $('#f-loan').checked=false;
+  $('#chk-all').checked=false; selected.clear();
+  go('list'); refreshFilters(); renderList(); counts();
+  scrollTo({top:0,behavior:'smooth'});
+};
+
 /* ─────── 표본목록 ─────── */
 function filtered(){
   const q=$('#q').value.trim().toLowerCase(), p=$('#f-pres').value,
@@ -938,24 +1026,213 @@ $('#e-pres').addEventListener('change',()=>{
 
 /* ─────── 표본입력 ─────── */
 function lastSiteId(){const s=DB.spec[DB.spec.length-1];return (s&&s.site_id)||'';}
+
+/* ─── 채집지점 선택기 ───────────────────────────────────────────
+   지점은 해마다 쌓이므로 <select> 로는 감당이 안 된다. 검색 + 최근 사용 +
+   지역 좁히기로 바꿨다. 화면에 한 번에 뿌리는 것은 언제나 30줄 안쪽이다. */
+const NEWSITE='__new';
+let siteQ='', siteRegion='', siteRows=[], siteSel=-1;
+const sNorm=s=>String(s||'').toLowerCase().replace(/\s+/g,'');
+/* 주소가 이미 "충남 …"으로 시작하면 지역명을 또 붙이지 않는다 (충북 ↔ 충청북도도 같이 본다) */
+function siteDupRegion(s){
+  const r=String(s.region||'').trim(), ko=String(s.locality_ko||'').trim();
+  if(!r||!ko)return false;
+  if(ko.startsWith(r))return true;
+  const t=ko.split(/\s+/)[0]||'';
+  return t.endsWith('도')&&t[0]===r[0];
+}
+const siteName=s=>String(s.locality_ko||s.locality_en||s.site_id||'');
+
+/* 라벨에 찍히는 시·도 약호 — 충남 CN, 강원 GW 식 */
+const RCODE={'경기':'GG','강원':'GW','충북':'CB','충남':'CN','전북':'JB','전남':'JN',
+  '경북':'GB','경남':'GN','제주':'JJ','서울':'SL','인천':'IC','세종':'SJ','대전':'DJ',
+  '광주':'GJ','대구':'DG','울산':'US','부산':'BS',
+  /* 긴 표기로 적혀 있어도 받아준다 */
+  '경기도':'GG','강원도':'GW','강원특별자치도':'GW','충청북도':'CB','충청남도':'CN',
+  '전라북도':'JB','전북특별자치도':'JB','전라남도':'JN','경상북도':'GB','경상남도':'GN',
+  '제주도':'JJ','제주특별자치도':'JJ','서울특별시':'SL','인천광역시':'IC','세종특별자치시':'SJ',
+  '대전광역시':'DJ','광주광역시':'GJ','대구광역시':'DG','울산광역시':'US','부산광역시':'BS'};
+function rcode(r){
+  r=String(r||'').trim(); if(!r)return'';
+  if(RCODE[r])return RCODE[r];
+  if(/^[A-Za-z]{1,4}$/.test(r))return r.toUpperCase();     /* 이미 약호로 적은 경우 */
+  const en=romanize(r).replace(/[^A-Za-z]/g,'');           /* 목록에 없으면 로마자 앞 두 자 */
+  return (en.slice(0,2)||r).toUpperCase();
+}
+const siteText=s=>!s?'':(siteDupRegion(s)?siteName(s):[s.region,siteName(s)].filter(Boolean).join(' '));
+
+/* 지점별 사용 횟수와 마지막 사용 순서 — 표본 목록에서 한 번에 센다 */
+function siteUse(){
+  const n=new Map(), last=new Map();
+  DB.spec.forEach((s,i)=>{ if(!s.site_id)return;
+    n.set(s.site_id,(n.get(s.site_id)||0)+1); last.set(s.site_id,i); });
+  return {n,last};
+}
+
 function siteOptions(sel){
-  if(!sel||!siteOf(sel))sel=DB.site.length?'':'__new';
-  $('#e-site').innerHTML='<option value="__new">— 새 지점 입력 —</option>'+DB.site.map(s=>
-    `<option value="${esc(s.site_id)}" ${s.site_id===sel?'selected':''}>${esc(s.region||'')} ${esc(s.locality_ko||'')}</option>`).join('');
-  if(sel)$('#e-site').value=sel;
-  siteChanged();
+  if(sel!==NEWSITE&&(!sel||!siteOf(sel)))sel=DB.site.length?'':NEWSITE;
+  $('#e-site').value=sel||'';
+  paintSiteBtn(); siteChanged();
+}
+function paintSiteBtn(){
+  const v=$('#e-site').value, t=$('#site-btn-t'), s=siteOf(v);
+  if(v===NEWSITE){t.textContent='＋ 새 지점 입력';t.className='t';}
+  else{t.textContent=s?siteText(s):'— 지점 선택 —'; t.className=s?'t':'t ph';}
 }
 function siteChanged(){
   const v=$('#e-site').value;
-  $('#newsite').style.display=v==='__new'?'':'none';
+  $('#newsite').style.display=v===NEWSITE?'':'none';
   const s=siteOf(v);
-  $('#e-siteinfo').textContent=s?[`${s.locality_en||''}`,`${s.lon??'?'}, ${s.lat??'?'} · ${s.elev??'?'}m`,s.note||''].filter(Boolean).join(' · '):'';
+  $('#e-siteinfo').textContent=s?[s.region?`라벨 ${rcode(s.region)}`:'',`${s.locality_en||''}`,
+    `${s.lon??'?'}, ${s.lat??'?'} · ${s.elev??'?'}m`,s.note||''].filter(Boolean).join(' · '):'';
+  paintDaySites();
 }
-$('#e-site').onchange=siteChanged;
+function pickSite(id){ $('#e-site').value=id; paintSiteBtn(); siteChanged(); closeSitePick(); }
+
+/* ─── 같은 날짜에 쓴 지점 ───────────────────────────────────────
+   하루에 여러 지점을 도는 일이 흔하고, 한 지점에서 여러 표본이 나온다.
+   채집일을 넣으면 그날 이미 쓴 지점을 입력칸 밑에 깔아 한 번에 고르게 한다.
+   그날 처음 가는 지점일 수도 있으니 "새 지점"도 같이 놓는다. */
+function sitesOnDate(iso){
+  const d=toRoman(iso); if(!d)return[];
+  const seen=new Map();
+  DB.spec.forEach((s,i)=>{ if(!s.site_id)return;
+    if(s.date===d||(s.date2&&s.date<=d&&d<=s.date2)||s.date2===d)seen.set(s.site_id,i); });
+  return [...seen.entries()].sort((a,b)=>b[1]-a[1])
+    .map(([id])=>siteOf(id)).filter(Boolean);
+}
+/* 칩에는 시·도 다음부터 — "충청남도 예산군 광시면 대리 산8-6" → "예산군 광시면 대리 산8-6" */
+function siteChip(s){
+  let t=siteName(s).trim().split(/\s+/);
+  if(t.length>2&&/(도|시)$/.test(t[0])&&t[0].length>=3)t=t.slice(1);
+  let o=t.join(' ');
+  return o.length>24?o.slice(0,23)+'…':o;
+}
+function paintDaySites(){
+  const D=$('#site-day'), iso=$('#e-date').value;
+  const hit=sitesOnDate(iso);
+  if(!hit.length){D.className='daysite';D.innerHTML='';return;}
+  const cur=$('#e-site').value;
+  D.className='daysite on';
+  D.innerHTML=`<span class="lb">${toRoman(iso)} 에 쓴 지점 — 눌러서 바로 고릅니다</span>`
+    +hit.slice(0,8).map(s=>`<button type="button" data-s="${esc(s.site_id)}" ${s.site_id===cur?'class="on"':''}
+        title="${esc(siteText(s))}">${esc(siteChip(s))}</button>`).join('')
+    +(hit.length>8?`<span class="lb">외 ${hit.length-8}곳</span>`:'')
+    +`<button type="button" class="nw" data-s="${NEWSITE}">＋ 다른 지점</button>`;
+  $$('#site-day button').forEach(b=>b.onclick=()=>{
+    if(b.dataset.s===NEWSITE){ siteQ=''; newSiteMode(); } else pickSite(b.dataset.s);
+  });
+}
+$('#e-date').addEventListener('change',paintDaySites);
+$('#e-date').addEventListener('input',paintDaySites);
+
+function openSitePick(){
+  siteQ=''; siteSel=-1; $('#site-q').value='';
+  $('#site-pick').classList.add('on');
+  paintSiteChips(); paintSiteList();
+  setTimeout(()=>{ $('#site-pop').scrollIntoView({block:'nearest'});
+    if(innerWidth>760)$('#site-q').focus(); },0);   /* 모바일은 키보드가 바로 뜨지 않게 */
+}
+function closeSitePick(){ $('#site-pick').classList.remove('on'); }
+$('#site-btn').onclick=()=>$('#site-pick').classList.contains('on')?closeSitePick():openSitePick();
+/* 캡처 단계에서 본다 — 칩을 다시 그리면 e.target 이 DOM에서 떨어져 contains() 가 어긋난다 */
+document.addEventListener('mousedown',e=>{
+  const t=e.target; if(!(t instanceof Element)||!t.closest('#site-pick'))closeSitePick(); },true);
+document.addEventListener('keydown',e=>{ if(e.key==='Escape')closeSitePick(); });
+
+/* 지역 칩 — 지점이 많아졌을 때만 나온다 */
+function paintSiteChips(){
+  const C=$('#site-chips');
+  const m=new Map(); DB.site.forEach(s=>{const r=s.region||'기타'; m.set(r,(m.get(r)||0)+1);});
+  const rs=[...m.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],'ko'));
+  if(DB.site.length<15||rs.length<2){C.innerHTML='';C.style.display='none';siteRegion='';return;}
+  C.style.display='';
+  C.innerHTML=`<span class="pick-chip ${siteRegion?'':'on'}" data-r="">전체 ${DB.site.length}</span>`
+    +rs.map(([r,n])=>`<span class="pick-chip ${siteRegion===r?'on':''}" data-r="${esc(r)}">${esc(r)} ${n}</span>`).join('');
+  $$('#site-chips .pick-chip').forEach(c=>c.onmousedown=e=>{
+    e.preventDefault(); siteRegion=c.dataset.r; siteSel=-1; paintSiteChips(); paintSiteList(); });
+}
+
+function paintSiteList(){
+  const q=sNorm(siteQ), U=siteUse();
+  const byUse=(a,b)=>(U.n.get(b.site_id)||0)-(U.n.get(a.site_id)||0)
+    ||String(a.locality_ko||'').localeCompare(String(b.locality_ko||''),'ko');
+  let pool=DB.site.slice();
+  if(siteRegion)pool=pool.filter(s=>(s.region||'기타')===siteRegion);
+  if(q)pool=pool.filter(s=>sNorm(s.region).includes(q)||sNorm(s.locality_ko).includes(q)
+    ||sNorm(s.locality_en).includes(q)||sNorm(s.note).includes(q));
+
+  const groups=[]; let tail='';
+  if(!q){
+    /* 채집일을 이미 넣었으면 그날 쓴 지점이 맨 위 */
+    const day=sitesOnDate($('#e-date').value).filter(s=>pool.includes(s));
+    const dayIds=new Set(day.map(s=>s.site_id));
+    const rec=pool.filter(s=>U.last.has(s.site_id)&&!dayIds.has(s.site_id))
+      .sort((a,b)=>U.last.get(b.site_id)-U.last.get(a.site_id)).slice(0,6);
+    const got=new Set([...dayIds,...rec.map(s=>s.site_id)]);
+    const rest=pool.filter(s=>!got.has(s.site_id)).sort(byUse);
+    const CAP=24;
+    if(day.length)groups.push({h:`${toRoman($('#e-date').value)} 에 쓴 지점`,items:day});
+    if(rec.length)groups.push({h:'최근 사용',items:rec});
+    if(rest.length)groups.push({h:(rec.length||day.length)?'그 밖의 지점 — 많이 쓴 순':'전체 지점 — 많이 쓴 순',items:rest.slice(0,CAP)});
+    if(rest.length>CAP)tail=`<div class="pick-none">…그 밖에 ${rest.length-CAP}곳이 더 있습니다. 위 칸에 검색어를 넣으십시오.</div>`;
+    if(!pool.length)tail='<div class="pick-none">등록된 지점이 없습니다 — 아래 <b>＋ 새 지점 입력</b>으로 시작하십시오.</div>';
+  }else{
+    const hit=pool.sort(byUse);
+    if(hit.length){
+      groups.push({h:`검색 결과 ${hit.length}곳${hit.length>40?' 중 40곳':''}`,items:hit.slice(0,40)});
+      if(hit.length>40)tail='<div class="pick-none">검색어를 조금 더 넣으면 좁혀집니다.</div>';
+    }else tail='<div class="pick-none">일치하는 지점이 없습니다 — 아래 <b>＋ 새 지점 입력</b>으로 등록하십시오.</div>';
+  }
+
+  siteRows=[]; let html='';
+  for(const g of groups){
+    html+=`<div class="pick-h">${esc(g.h)}</div>`;
+    for(const s of g.items){
+      const i=siteRows.push(s)-1, c=U.n.get(s.site_id)||0;
+      html+=`<div class="pick-i ${i===siteSel?'sel':''}" data-i="${i}">`
+        +((s.region&&!siteDupRegion(s))?`<span class="rg">${esc(s.region)}</span>`:'')
+        +`<span class="nm">${esc(siteName(s))}</span>`
+        +`<span class="m">${c?c+'점':''}</span></div>`;
+    }
+  }
+  $('#site-list').innerHTML=html+tail;
+  $$('#site-list .pick-i').forEach(d=>d.onmousedown=e=>{
+    e.preventDefault(); pickSite(siteRows[+d.dataset.i].site_id); });
+  const qt=siteQ.trim();
+  $('#site-new').textContent=qt?`＋ “${qt}” 를 새 지점으로 등록`:'＋ 새 지점 입력';
+}
+
+/* 검색창 — 두 글자만 쳐도 걸러진다. 위/아래·엔터로도 고를 수 있다 */
+$('#site-q').addEventListener('input',()=>{
+  siteQ=$('#site-q').value; siteSel=siteQ.trim()?0:-1; paintSiteList(); });
+$('#site-q').addEventListener('keydown',e=>{
+  if(e.key==='Escape'){closeSitePick();$('#site-btn').focus();return;}
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+    if(!siteRows.length)return;
+    siteSel=e.key==='ArrowDown'?Math.min(siteSel+1,siteRows.length-1):Math.max(siteSel-1,0);
+    paintSiteList();
+    const el=$('#site-list .pick-i.sel'); if(el)el.scrollIntoView({block:'nearest'});
+    e.preventDefault();
+  }else if(e.key==='Enter'){
+    e.preventDefault();
+    if(siteSel>=0&&siteRows[siteSel])pickSite(siteRows[siteSel].site_id); else newSiteMode();
+  }
+});
+function newSiteMode(){
+  const q=siteQ.trim();
+  $('#e-site').value=NEWSITE; paintSiteBtn(); siteChanged(); closeSitePick();
+  if(q&&!$('#s-ko').value.trim()){                 /* 친 것을 새 지점 칸으로 옮겨 담는다 */
+    $('#s-ko').value=q; $('#s-ko').dispatchEvent(new Event('input'));
+  }
+  setTimeout(()=>$('#s-ko').focus(),0);
+}
+$('#site-new').onmousedown=e=>{e.preventDefault();newSiteMode();};
+
 /* 표본 기록 시 새 지점을 함께 저장 — 별도 지점 등록 절차 없음 */
 function resolveSite(){
   const v=$('#e-site').value;
-  if(v!=='__new')return v;
+  if(v!==NEWSITE)return v;
   const ko=$('#s-ko').value.trim();
   if(!ko)return'';
   const dup=DB.site.find(x=>x.locality_ko===ko);
@@ -1529,7 +1806,7 @@ function renderQueue(){
 function dryLabel(s){
   const st=siteOf(s.site_id)||{};
   return `<div class="set"><div class="lab dry"><div class="in">
-    <div class="hd f36" style="height:19.05mm"><span>KOREA</span><span class="kr">${esc(st.region||'')}</span><span>${esc(s.no)}</span></div>
+    <div class="hd f36" style="height:19.05mm"><span>KOREA</span><span>${esc(rcode(st.region))}</span><span>${esc(s.no)}</span></div>
     <div class="fit f27" style="height:38.10mm;line-height:1.15">${esc(st.locality_en||'')}</div>
     <div class="fit f36" style="height:19.05mm">${esc(dateStr(s))}</div>
     <div class="gp f36" style="height:19.05mm"><span>${st.lon??''}</span><span>${st.lat??''}</span></div>
@@ -1546,7 +1823,7 @@ function wetLabel(s){
   const st=siteOf(s.site_id)||{};
   const loc=[s.container,s.position].filter(Boolean).join(' ');
   return `<div class="lab wet"><div class="in">
-    <div class="hd fit f50" style="height:35.72mm"><span>KOREA</span><span class="kr">${esc(st.region||'')}</span>${CFG.inst?`<span>${esc(CFG.inst)}</span>`:''}<span>${esc(s.no)}</span></div>
+    <div class="hd fit f50" style="height:35.72mm"><span>KOREA</span><span>${esc(rcode(st.region))}</span>${CFG.inst?`<span>${esc(CFG.inst)}</span>`:''}<span>${esc(s.no)}</span></div>
     <div class="kr fit f45" style="height:28.57mm">${esc(s.kor||'')}</div>
     <div class="it fit one f45" style="height:28.57mm"><span>${sciFmt(s.sci)}${
       s.status?`<span class="rm" style="font-weight:400"> ${STATUSMARK[s.status]}</span>`:''}</span></div>
@@ -1584,15 +1861,39 @@ function autofit(){
     }
   }
 }
-/* 좁은 화면에서 A4 미리보기를 화면 폭에 맞춰 축소 (인쇄 배율과 무관) */
-function fitPreview(){
-  const w=$('#sheetwrap'); if(!w)return;
-  const avail=w.clientWidth;
-  const mm=210*(96/25.4);
-  const s=avail&&avail<mm?Math.max(0.3,avail/mm):1;
-  document.documentElement.style.setProperty('--pv',s);
-  w.style.height=s<1?(document.querySelector('#sheet').offsetHeight*s)+'px':'';
+/* ─── 미리보기 배율 — 화면에서만 쓰는 값이고 인쇄 크기와는 무관하다 ───
+   zoom 을 쓰는 이유: transform 과 달리 배치에 반영되므로 가운데 정렬과
+   스크롤 범위가 저절로 맞는다. 인쇄 때는 위 @media print 에서 1로 되돌린다. */
+const PVSTEP=[.25,.35,.5,.7,1,1.4,2,3,4,6];
+let pvUser=null;                       /* null = 화면 폭에 맞춤 */
+function pvNow(){
+  const w=$('#sheetwrap'); const mm=210*(96/25.4);
+  const avail=w?w.clientWidth-2:0;
+  const fit=avail>0?Math.min(1,Math.max(.2,avail/mm)):1;
+  return pvUser||fit;
 }
+function fitPreview(){
+  if(!$('#sheetwrap'))return;
+  const s=pvNow();
+  document.documentElement.style.setProperty('--pv',s);
+  $('#pv-n').textContent=Math.round(s*100)+'%';
+  $('#pv-fit').classList.toggle('on',!pvUser);
+  $('#pv-100').classList.toggle('on',pvUser===1);
+}
+function pvSet(v){pvUser=v;fitPreview();}
+function pvStep(d){
+  const cur=pvNow();
+  const next=d>0?PVSTEP.find(v=>v>cur+1e-4):[...PVSTEP].reverse().find(v=>v<cur-1e-4);
+  pvSet(next||(d>0?PVSTEP[PVSTEP.length-1]:PVSTEP[0]));
+}
+$('#pv-in').onclick=()=>pvStep(1);
+$('#pv-out').onclick=()=>pvStep(-1);
+$('#pv-fit').onclick=()=>pvSet(null);
+$('#pv-100').onclick=()=>pvSet(1);
+$('#sheetwrap').addEventListener('wheel',e=>{
+  if(!e.ctrlKey&&!e.metaKey)return;
+  e.preventDefault(); pvStep(e.deltaY<0?1:-1);
+},{passive:false});
 window.addEventListener('resize',fitPreview);
 function applyK(){
   const m=parseFloat($('#p-meas').value)||100, k=100/m;
