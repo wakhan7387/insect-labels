@@ -222,6 +222,10 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
       <select id="f-pres" style="width:auto"><option value="">보존 전체</option><option value="wet">액침</option><option value="dry">건조</option></select>
       <select id="f-year" style="width:auto"><option value="">연도 전체</option></select>
       <select id="f-fam" style="width:auto"><option value="">과 전체</option></select>
+      <select id="f-status" style="width:auto">
+        <option value="">동정 상태 전체</option><option value="new">신종 후보</option>
+        <option value="unrec">미기록 후보</option><option value="any">후보 표시 있음</option>
+        <option value="fixed">확정만</option></select>
       <select id="f-exp" style="width:auto">
         <option value="">실험 전체</option><option value="dissect">해부한 것</option>
         <option value="dna">DNA 추출한 것</option><option value="photo">촬영한 것</option>
@@ -319,11 +323,23 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
       <div class="ac-list" id="aclist"></div></div>
     <div class="grid g4" style="margin-top:12px">
       <div><label class="fl">국명</label><input type="text" id="e-kor"></div>
-      <div><label class="fl">학명</label><input type="text" id="e-sci" class="sci"></div>
+      <div><label class="fl">학명</label>
+        <div class="rowflex" style="gap:6px;flex-wrap:nowrap">
+          <input type="text" id="e-sci" class="sci">
+          <button class="btn" id="e-sp" title="속명만 남기고 sp. 로 처리 — 목·과는 종목록에서 자동으로 채웁니다">sp.</button>
+        </div></div>
       <div><label class="fl">목</label><input type="text" id="e-order"></div>
       <div><label class="fl">과</label><input type="text" id="e-family"></div>
     </div>
-    <div class="rowflex" style="margin-top:8px"><span class="hint">지정 여부:</span><span id="e-flags"><span class="hint">종을 고르면 표시됩니다</span></span></div>
+    <div class="rowflex" style="margin-top:10px">
+      <span class="hint">동정 상태:</span>
+      <div class="seg" id="e-status">
+        <button data-st="" class="on">확정</button>
+        <button data-st="new">신종 후보</button>
+        <button data-st="unrec">미기록 후보</button>
+      </div>
+      <span class="hint" style="margin-left:8px">지정 여부:</span><span id="e-flags"><span class="hint">종을 고르면 표시됩니다</span></span>
+    </div>
     <div class="grid g3" style="margin-top:12px">
       <div><label class="fl">동정자</label><select id="e-det"></select>
         <input type="text" id="e-det2" placeholder="이름 직접 입력" style="display:none;margin-top:6px"></div>
@@ -584,7 +600,7 @@ const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 /* ─────── 상태 ─────── */
-const BUILD='2026-08-28 · v12';
+const BUILD='2026-08-28 · v15';
 const DB={spec:[],site:[],chk:[],cont:[]};
 const SHA={};
 let CFG={owner:'',repo:'',branch:'main',store:'local',token:'',
@@ -596,6 +612,8 @@ const PRES={wet:'액침',dry:'건조'};
 const SEX={M:'♂',F:'♀','':''};
 const CTYPE={grid:'격자 9×9',free:'상자형'};
 const LTYPE={loan:'대여',return:'반납',memo:'메모'};
+const STATUS={new:'신종 후보',unrec:'미기록 후보'};
+const STATUSMARK={new:'n. sp.?',unrec:'new rec.?'};
 
 /* ─────── 유틸 ─────── */
 function b64enc(str){const b=new TextEncoder().encode(str);let s='';const C=0x8000;
@@ -607,7 +625,7 @@ const toJL=a=>a.map(o=>JSON.stringify(o,Object.keys(o).sort())).join('\n')+'\n';
 
 /* 정규화 — 구버전 파일 호환. '생식기 슬라이드' 보존형태는 건조+해부체크로 흡수 */
 function normSpec(s){
-  const r={exp:{dissect:false,dna:false,photo:false,note:''},log:[],date2:null,...s,
+  const r={exp:{dissect:false,dna:false,photo:false,note:''},log:[],date2:null,status:'',...s,
     exp:{dissect:false,dna:false,photo:false,note:'',...(s.exp||{})},
     log:Array.isArray(s.log)?s.log:[]};
   if(r.preservation==='slide'){r.preservation='dry';r.exp.dissect=true;}
@@ -681,8 +699,9 @@ function showView(v,no){
   if(v==='boxin')renderContTable();
   if(v==='print')renderQueue();
   if(v==='entry'){
-    if(no&&specOf(no))fillEntry(no);
-    else if(!$('#e-det').options.length)fillEntry(null);
+    if(no==='new')fillEntry(null);              /* 명시적 새 표본 — 반드시 초기화 */
+    else if(no&&specOf(no))fillEntry(no);
+    else if(!$('#e-det').options.length)fillEntry(null);  /* 탭 첫 진입만 */
   }
 }
 /* 주소 해시에 상태를 남긴다 — #list, #entry/JH000012 */
@@ -710,7 +729,7 @@ $$('.gnb button[data-v]').forEach(b=>b.onclick=()=>go(b.dataset.v));
 function filtered(){
   const q=$('#q').value.trim().toLowerCase(), p=$('#f-pres').value,
         y=$('#f-year').value, fa=$('#f-fam').value, unp=$('#f-unp').checked,
-        ex=$('#f-exp').value, ln=$('#f-loan').checked;
+        ex=$('#f-exp').value, ln=$('#f-loan').checked, st1=$('#f-status').value;
   return DB.spec.filter(s=>{
     if(p&&s.preservation!==p)return false;
     if(fa&&(s.family_ko||s.family_la)!==fa)return false;
@@ -719,6 +738,9 @@ function filtered(){
     if(ln&&!loanOpen(s))return false;
     if(ex==='none'){if(s.exp.dissect||s.exp.dna||s.exp.photo)return false;}
     else if(ex&&!s.exp[ex])return false;
+    if(st1==='any'){if(!s.status)return false;}
+    else if(st1==='fixed'){if(s.status)return false;}
+    else if(st1&&s.status!==st1)return false;
     if(!q)return true;
     const st=siteOf(s.site_id);
     return [s.no,s.legacy_no,s.kor,s.sci,s.family_ko,s.family_la,s.order_ko,
@@ -727,6 +749,7 @@ function filtered(){
 }
 function expTags(s){
   const t=[];
+  if(s.status)t.push(`<span class="tag w">${STATUS[s.status]}</span>`);
   if(s.exp.dissect)t.push('<span class="tag b">해부</span>');
   if(s.exp.dna)t.push('<span class="tag b">DNA</span>');
   if(s.exp.photo)t.push('<span class="tag b">사진</span>');
@@ -761,7 +784,7 @@ function renderList(){
   selinfo();
 }
 const selinfo=()=>$('#selinfo').textContent=selected.size?`${selected.size}건 선택됨`:'';
-['#q','#f-pres','#f-year','#f-fam','#f-exp','#f-unp','#f-loan'].forEach(s=>{
+['#q','#f-pres','#f-year','#f-fam','#f-exp','#f-status','#f-unp','#f-loan'].forEach(s=>{
   $(s).addEventListener('input',renderList); $(s).addEventListener('change',renderList);});
 $('#chk-all').onchange=e=>{filtered().forEach(s=>e.target.checked?selected.add(s.no):selected.delete(s.no));renderList();};
 $('#sel-to-q').onclick=()=>{if(!selected.size)return say('선택된 표본이 없습니다.','warn');
@@ -1025,6 +1048,7 @@ function fillEntry(no){
   collOptions(s?s.collector:CFG.coll); v('#e-collen',s?s.collector_en:CFG.collen);
   v('#e-cont',s&&s.container); fillContList();
   v('#e-pos',s&&s.position); contChanged();
+  setStatus(s?s.status:'');
   $('#x-dissect').checked=!!(s&&s.exp.dissect); $('#x-dna').checked=!!(s&&s.exp.dna);
   $('#x-photo').checked=!!(s&&s.exp.photo); v('#x-note',s&&s.exp.note);
   editLog=s?JSON.parse(JSON.stringify(s.log||[])):[];
@@ -1033,7 +1057,7 @@ function fillEntry(no){
   $('#e-flags').innerHTML='<span class="hint">종을 고르면 표시됩니다</span>';
   siteOptions(s?s.site_id:lastSiteId());
 }
-$('#e-new').onclick=()=>go('entry',null);
+$('#e-new').onclick=()=>go('entry','new');
 
 function saveRec(){
   let no=$('#e-no').value.trim();
@@ -1072,6 +1096,7 @@ function saveRec(){
     count:Math.max(0,+$('#e-count').value||0), sex:$('#e-sex').value,
     preservation:$('#e-pres').value, method:$('#e-method').value.trim(),
     container:cont, position:pos,
+    status:entryStatus,
     exp:{dissect:$('#x-dissect').checked, dna:$('#x-dna').checked,
          photo:$('#x-photo').checked, note:$('#x-note').value.trim()},
     log:editLog,
@@ -1097,12 +1122,14 @@ $('#e-save').onclick=()=>{saveRec();};
 $('#e-next').onclick=()=>{
   const rec=saveRec(); if(!rec)return;
   editing=null;
+  try{history.replaceState(null,'','#entry');}catch(e){}
   $('#e-title').textContent='새 표본'; $('#e-del').style.display='none';
   $('#e-parent').textContent=''; $('#e-split').style.display='none'; $('#splitbox').style.display='none';
   $('#e-no').value=nextNo(); noHint();
   $('#e-count').value=1; $('#e-sex').value='';
   ['#e-kor','#e-sci','#e-order','#e-family','#e-note','#x-note','#e-search','#e-pos','#e-detdate'].forEach(x=>$(x).value='');
   $('#x-dissect').checked=$('#x-dna').checked=$('#x-photo').checked=false;
+  setStatus('');
   editLog=[]; renderLog(); closeAC();
   $('#e-flags').innerHTML='<span class="hint">종을 고르면 표시됩니다</span>';
   detOptions(CFG.coll);
@@ -1114,7 +1141,7 @@ $('#e-del').onclick=()=>{
   const b=say(`${editing} 을(를) 삭제할까요?`,'bad');
   const y=document.createElement('button'); y.className='btn sm dgr'; y.textContent='삭제';
   y.onclick=()=>{DB.spec=DB.spec.filter(s=>s.no!==editing);mark(true);renderList();counts();
-    go('entry',null);b.classList.remove('on');};
+    go('entry','new');b.classList.remove('on');};
   $('#bacts').append(y);
 };
 
@@ -1168,6 +1195,34 @@ function pick(r){
   $('#e-flags').innerHTML=F.length?F.map(([k,t])=>`<span class="tag ${k}">${t}</span>`).join(''):'<span class="hint">지정 없음</span>';
   $('#e-search').value=''; closeAC();
 }
+
+/* sp. 처리 — 속명만 남기고 목·과를 종목록에서 찾아 채운다 */
+$('#e-sp').onclick=()=>{
+  const raw=($('#e-sci').value.trim()||$('#e-search').value.trim());
+  const g=(raw.split(/\s+/)[0]||'').replace(/[^A-Za-z]/g,'');
+  if(!g)return say('속명을 먼저 입력하십시오. 예: Scaphoideus','warn');
+  const genus=g[0].toUpperCase()+g.slice(1).toLowerCase();
+  $('#e-sci').value=genus+' sp.';
+  $('#e-kor').value='';                       /* 종까지 확정 안 됐으므로 국명은 비움 */
+  const hit=DB.chk.find(r=>(r.genus||'')===genus)
+        ||DB.chk.find(r=>String(r.name||'').startsWith(genus+' '));
+  if(hit){
+    $('#e-order').value=hit.order_ko||hit.order_la||'';
+    $('#e-family').value=hit.family_ko||hit.family_la||'';
+    say(`${genus} sp. — ${$('#e-family').value} 로 채웠습니다.`);
+  }else{
+    say(`${genus} sp. 로 바꿨습니다. 종목록에 없는 속이라 목·과는 직접 입력하십시오.`,'warn');
+  }
+  $('#e-search').value=''; closeAC();
+};
+
+/* 동정 상태 — 확정 / 신종 후보 / 미기록 후보 */
+let entryStatus='';
+function setStatus(v){
+  entryStatus=v||'';
+  $$('#e-status button').forEach(b=>b.classList.toggle('on',(b.dataset.st||'')===entryStatus));
+}
+$$('#e-status button').forEach(b=>b.onclick=()=>setStatus(b.dataset.st));
 
 /* 개체 분리 — 건조표본으로 */
 $('#e-split').onclick=()=>{const s=specOf(editing);if(!s)return;
@@ -1448,7 +1503,8 @@ function dryLabel(s){
   </div></div>
   <div class="lab dry"><div class="in">
     <div class="kr fit f36" style="height:57.15mm;line-height:1.15">${esc(s.kor||'')}</div>
-    <div class="it fit f36" style="height:38.10mm;line-height:1.15">${esc(s.sci||'')}${SEX[s.sex]?' '+SEX[s.sex]:''}</div>
+    <div class="it fit f36" style="height:38.10mm;line-height:1.15">${esc(s.sci||'')}${SEX[s.sex]?' '+SEX[s.sex]:''}${
+      s.status?`<span style="font-style:normal;font-weight:400"> ${STATUSMARK[s.status]}</span>`:''}</div>
     <div class="gp f36" style="height:19.05mm"><span>Det.</span><span class="f27">${esc(s.det_by_en||'')}</span></div>
   </div></div></div>`;
 }
@@ -1458,7 +1514,8 @@ function wetLabel(s){
   return `<div class="lab wet"><div class="in">
     <div class="hd fit f50" style="height:35.72mm"><span>KOREA</span><span class="kr">${esc(st.region||'')}</span>${CFG.inst?`<span>${esc(CFG.inst)}</span>`:''}<span>${esc(s.no)}</span></div>
     <div class="kr fit f45" style="height:28.57mm">${esc(s.kor||'')}</div>
-    <div class="it fit f45" style="height:28.57mm">${esc(s.sci||'')}</div>
+    <div class="it fit f45" style="height:28.57mm">${esc(s.sci||'')}${
+      s.status?`<span style="font-style:normal;font-weight:400"> ${STATUSMARK[s.status]}</span>`:''}</div>
     <div class="fit f40" style="height:42.86mm;line-height:1.15">${esc(st.locality_en||'')}</div>
     <div class="fit f45" style="height:28.57mm">${esc(dateStr(s))}</div>
     <div class="gp fit f45" style="height:28.57mm"><span>${st.lon??''}</span><span>${st.lat??''}</span></div>
@@ -1533,13 +1590,13 @@ function download(name,text){const b=new Blob([text],{type:'application/x-ndjson
 $('#dl-xls').onclick=()=>{
   const rows=filtered();
   if(!rows.length)return say('내보낼 표본이 없습니다.','warn');
-  const H=['채집번호','국명','학명','목','과','지역','채집지','채집지(영문)','경도','위도','고도(m)',
+  const H=['채집번호','국명','학명','동정상태','목','과','지역','채집지','채집지(영문)','경도','위도','고도(m)',
     '채집일','종료일','채집방법','채집자','채집자(영문)','동정자','동정일','개체수','성별','보존',
     '박스','칸','모체번호','해부','DNA','사진','실험비고','대여중','기록수','동정비고','출력일'];
   const q=v=>{v=v==null?'':String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
   const L=[H.join(',')];
   rows.forEach(s=>{const st=siteOf(s.site_id)||{};const lo=loanOpen(s);
-    L.push([s.no,s.kor,s.sci,s.order_ko||s.order_la,s.family_ko||s.family_la,st.region,st.locality_ko,
+    L.push([s.no,s.kor,s.sci,STATUS[s.status]||'',s.order_ko||s.order_la,s.family_ko||s.family_la,st.region,st.locality_ko,
       st.locality_en,st.lon,st.lat,st.elev,s.date,s.date2,s.method,s.collector,s.collector_en,
       s.det_by,s.det_date,s.count,SEX[s.sex]||'',PRES[s.preservation]||'',s.container,s.position,
       s.parent_no,s.exp.dissect?'Y':'',s.exp.dna?'Y':'',s.exp.photo?'Y':'',s.exp.note,
@@ -1766,6 +1823,27 @@ $('#save').onclick=async()=>{
   await doSync(false);
 };
 async function doSync(force){
+  /* 안전장치 — 이번에 불러온 적이 없는데 원격에 자료가 있으면 덮어쓰지 않는다.
+     (빈 화면에서 한 건 넣고 동기화해 원격 전체를 날리는 사고 방지) */
+  if(!force&&!SHA.spec){
+    try{
+      const r=await gh(api(`contents/${PATH.spec}?ref=${encodeURIComponent(CFG.branch)}`));
+      if(r.ok){
+        const j=await r.json();
+        if(j.size>0){
+          const k=await ghRead(PATH.spec,1).catch(()=>({rows:[]}));
+          $('#status').textContent='동기화 안 된 변경 있음'; $('#status').className='dirty';
+          const bn=say(`아직 불러오지 않았습니다 — GitHub에 표본 ${k.rows.length}건이 있는데 지금 화면은 ${DB.spec.length}건입니다. 그대로 올리면 GitHub 자료가 지워집니다.`,'bad');
+          const y=document.createElement('button'); y.className='btn sm pri'; y.textContent='먼저 불러오기';
+          y.onclick=()=>{bn.classList.remove('on');$('#c-pull').click();};
+          const n=document.createElement('button'); n.className='btn sm dgr'; n.textContent='알고 있음 · 덮어쓰기';
+          n.onclick=()=>{bn.classList.remove('on');doSync(true);};
+          $('#bacts').append(y,n);
+          return;
+        }
+      }
+    }catch(e){}
+  }
   $('#status').textContent='커밋 중…';
   try{
     const msg=`표본 갱신 ${new Date().toISOString().slice(0,16).replace('T',' ')}`;
@@ -1776,7 +1854,9 @@ async function doSync(force){
   }catch(e){
     $('#status').textContent='커밋 실패'; $('#status').className='err';
     if(e.conflict){
-      const bn=say('다른 기기에서 먼저 저장한 변경이 있습니다 — 어떻게 할까요?','warn');
+      let rn='?';
+      try{const k=await ghRead(PATH.spec,1); rn=k.rows.length;}catch(_){}
+      const bn=say(`다른 기기에서 먼저 저장한 변경이 있습니다 — GitHub ${rn}건 / 내 화면 ${DB.spec.length}건.`,'warn');
       const a1=document.createElement('button'); a1.className='btn sm'; a1.textContent='다른 기기 것 가져오기';
       a1.onclick=()=>{bn.classList.remove('on');$('#c-pull').click();};
       const a2=document.createElement('button'); a2.className='btn sm dgr'; a2.textContent='내 것으로 덮어쓰기';
