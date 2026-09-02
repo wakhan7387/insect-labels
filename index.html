@@ -123,7 +123,7 @@ textarea{resize:vertical;min-height:54px}
   .banner{left:10px;right:10px;transform:none;max-width:none;bottom:10px;flex-wrap:wrap}
   footer .inner{padding:14px 12px;gap:8px}
 }
-@media print{ #sheet{zoom:1!important} #sheetwrap{overflow:visible} }
+@media print{ #sheet{zoom:1!important} }
 
 .btn{background:var(--subtle);border:1px solid rgba(31,35,40,.15);padding:5px 14px;border-radius:6px;
   cursor:pointer;font-size:13.5px;font-weight:500;white-space:nowrap;color:var(--fg)}
@@ -221,6 +221,12 @@ input.cell:focus{background:var(--canvas)}
   background:transparent;font-size:12.5px;color:var(--accent);cursor:pointer;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pick-new:hover{background:var(--accent-l);border-color:var(--accent)}
+/* 채집방법 — 값이 들어 있어도 한 번에 바꿀 수 있는 버튼 줄 */
+.mchips{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.mchips button{font-size:11.5px;line-height:22px;padding:0 10px;border-radius:2em;cursor:pointer;
+  border:1px solid var(--border);background:var(--subtle);color:var(--fg);white-space:nowrap}
+.mchips button:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-l)}
+.mchips button.on{background:var(--fg);color:var(--canvas);border-color:var(--fg);font-weight:600}
 /* 같은 날짜에 쓴 지점 — 입력칸 바로 밑에 눌러 고를 수 있게 깔린다 */
 .daysite{display:none;flex-wrap:wrap;gap:5px;align-items:center;margin-top:10px}
 .daysite.on{display:flex}
@@ -247,7 +253,9 @@ input.cell:focus{background:var(--canvas)}
 /* ── 라벨 (인쇄 기하 — 검증 완료, 임의 수정 금지) ── */
 #sheet{background:#fff;color:#000;padding:10mm;border:1px solid var(--border);border-radius:6px;
   margin:0 auto;width:210mm;zoom:var(--pv,1)}
-#sheetwrap{overflow:auto;margin-top:8px}
+/* 배율을 올려도 페이지 전체가 커지지 않도록 바깥 틀은 고정하고 안에서 스크롤한다 */
+#sheetwrap{overflow:auto;margin-top:8px;height:70vh;min-height:380px;resize:vertical;
+  background:var(--subtle);border:1px solid var(--border);border-radius:6px;padding:10px}
 /* 미리보기 배율 막대 */
 .pvbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:14px}
 .pvbar #pv-n{min-width:52px;text-align:center;font-size:12.5px;color:var(--mut)}
@@ -256,7 +264,7 @@ input.cell:focus{background:var(--canvas)}
 .lgrid{display:flex;flex-wrap:wrap;align-content:flex-start}
 .set{width:calc(20.002mm*var(--k))}
 .lab{position:relative;overflow:hidden}
-.guides .lab{outline:.08mm dashed #bbb;outline-offset:-.04mm}
+.guides .lab{outline:.08mm solid #000;outline-offset:-.04mm}
 .in{position:absolute;top:0;left:0;transform-origin:0 0;display:flex;flex-direction:column;
     font-family:Arial,Helvetica,"Malgun Gothic",sans-serif;line-height:1;color:#000}
 .in>div{display:flex;align-items:center;justify-content:center;overflow:hidden;text-align:center;padding:0 1.5mm}
@@ -301,6 +309,8 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
   .ghdr,.gnb,footer,.noprint,.banner,main>.view:not(.on){display:none!important}
   main{padding:0;max-width:none}
   #sheet,.ruler{border:0;border-radius:0;padding:0;margin:0}
+  /* 화면용 고정 틀은 인쇄에서 완전히 푼다 — 안 그러면 70vh에서 잘린다 */
+  #sheetwrap{overflow:visible;height:auto;min-height:0;padding:0;border:0;background:none;margin:0;resize:none}
   /* 패딩이 빠지면 내부 폭이 210mm가 되어 한 줄 10세트 — 10번째가 여백에 잘린다.
      인쇄 가능 폭(210 − 여백 10×2)으로 고정해 화면과 같은 9세트 줄바꿈을 강제한다 */
   #sheet{width:190mm}
@@ -411,12 +421,8 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
       <div><label class="fl">채집일 (시작)</label><input type="date" id="e-date"></div>
       <div><label class="fl">종료일 — 트랩 회수일, 하루면 비움</label><input type="date" id="e-date2"></div>
       <div><label class="fl">채집방법</label>
-        <input type="text" id="e-method" list="methoddl" placeholder="LT · SW · MA · PT" autocomplete="off">
-        <datalist id="methoddl">
-          <option value="LT">등화채집</option><option value="SW">스위핑</option>
-          <option value="MA">말레이즈트랩</option><option value="PT">핏폴트랩</option>
-          <option value="BE">베이팅</option><option value="HC">직접채집</option>
-        </datalist></div>
+        <input type="text" id="e-method" placeholder="직접 입력도 됩니다" autocomplete="off">
+        <div class="mchips" id="e-mchips"></div></div>
     </div>
 
     <div class="daysite" id="site-day"></div>
@@ -491,9 +497,10 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
         <input type="text" id="e-cont" class="mono" list="contdl" autocomplete="off">
         <datalist id="contdl"></datalist>
         <span class="hint" id="e-conthint"></span></div>
-      <div id="e-poswrap"><label class="fl">칸 위치 — 입력하거나 아래 격자를 클릭</label>
-        <input type="text" id="e-pos" class="mono" list="posdl" placeholder="A1">
+      <div id="e-poswrap"><label class="fl">칸 위치 — 격자를 눌러 고르거나 직접 입력 (여러 칸 가능)</label>
+        <input type="text" id="e-pos" class="mono" list="posdl" placeholder="A2-E2 또는 A2 B2 C2">
         <datalist id="posdl"></datalist>
+        <span class="hint" id="e-poshint"></span>
         <div class="mini" id="e-minigrid"></div></div>
       <div id="e-splitwrap" style="display:none"><label class="fl">개체 꺼내기 · 보존 전환</label>
         <button class="btn" id="e-split">꺼내기 / 전환</button></div>
@@ -810,7 +817,7 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const sciFmt=s=>esc(s).replace(/([()])/g,'<span class="rm">$1</span>');
 
 /* ─────── 상태 ─────── */
-const BUILD='2026-08-28 · v27';
+const BUILD='2026-08-28 · v28';
 const DB={spec:[],site:[],chk:[],cont:[]};
 const SHA={};
 let CFG={owner:'',repo:'',branch:'main',store:'local',token:'',
@@ -1056,7 +1063,7 @@ function renderList(){
   renderPager(all.length);
   $('#tb').innerHTML=rows.map(s=>{
     const st=siteOf(s.site_id);
-    const keep=[s.container,(contOf(s.container)||{}).type==='grid'?s.position:''].filter(Boolean).join(' ');
+    const keep=[s.container,(contOf(s.container)||{}).type==='grid'?posShort(s.position):''].filter(Boolean).join(' ');
     return `<tr data-no="${esc(s.no)}">
       <td class="c"><input type="checkbox" class="rc" data-no="${esc(s.no)}" ${selected.has(s.no)?'checked':''} style="width:auto"></td>
       <td class="n"><a class="lnk mono" data-edit="${esc(s.no)}" title="편집">${esc(s.no)}</a>${s.parent_no?`<div class="tag">← ${esc(s.parent_no)}</div>`:''}</td>
@@ -1180,9 +1187,48 @@ function contChanged(){
     wrap.style.display='none'; $('#e-pos').value='';
   }
 }
+/* ─── 칸 위치 — 한 표본이 여러 칸을 쓸 수 있다 ───────────────
+   200마리를 tube 다섯 개에 나눠 담아 A2~E2에 꽂는 경우가 있다.
+   저장은 "A2 B2 C2 D2 E2" 처럼 공백으로 이어 붙인 문자열 하나.
+   입력은 A2-E2(범위), A2,B2 / A2 B2(나열) 모두 받는다. */
+const cellIdx=p=>[AZ.indexOf(p[0]), +p.slice(1)];          /* A1 → [0,1] */
+function posParse(v){
+  const out=[], seen=new Set();
+  String(v||'').toUpperCase().split(/[\s,;]+/).filter(Boolean).forEach(tok=>{
+    const rng=/^([A-I])([1-9])\s*[-~]\s*([A-I])([1-9])$/.exec(tok);
+    if(rng){                                                /* 사각 범위 A2-E2 / A1-C3 */
+      const c0=Math.min(AZ.indexOf(rng[1]),AZ.indexOf(rng[3])), c1=Math.max(AZ.indexOf(rng[1]),AZ.indexOf(rng[3]));
+      const r0=Math.min(+rng[2],+rng[4]), r1=Math.max(+rng[2],+rng[4]);
+      for(let r=r0;r<=r1;r++)for(let c=c0;c<=c1;c++){const p=AZ[c]+r;if(!seen.has(p)){seen.add(p);out.push(p);}}
+      return;
+    }
+    if(/^[A-I][1-9]$/.test(tok)&&!seen.has(tok)){seen.add(tok);out.push(tok);}
+  });
+  out.sort((a,b)=>{const A=cellIdx(a),B=cellIdx(b);return A[1]-B[1]||A[0]-B[0];});
+  return out;
+}
+const posList=v=>posParse(v);
+const posNorm=v=>posParse(v).join(' ');
+/* 화면에 짧게: 연속 칸은 A2-E2로 접는다 */
+function posShort(v){
+  const L=posParse(v); if(L.length<3)return L.join(' ');
+  const out=[]; let i=0;
+  while(i<L.length){
+    let j=i;
+    while(j+1<L.length){
+      const a=cellIdx(L[j]), b=cellIdx(L[j+1]);
+      if(b[1]===a[1]&&b[0]===a[0]+1)j++; else break;
+    }
+    out.push(j-i>=2?`${L[i]}-${L[j]}`:L.slice(i,j+1).join(' '));
+    i=j+1;
+  }
+  return out.join(' ');
+}
+/* 칸 → 그 칸을 쓰는 다른 표본 */
 function occupiedMap(c){
   const occ={};
-  DB.spec.forEach(s=>{if(s.container===c.id&&s.position&&s.no!==editing)occ[s.position]=(occ[s.position]||0)+1;});
+  DB.spec.forEach(s=>{ if(s.container!==c.id||s.no===editing)return;
+    posList(s.position).forEach(p=>{occ[p]=(occ[p]||0)+1;}); });
   return occ;
 }
 function fillPosList(c){
@@ -1194,7 +1240,7 @@ function fillPosList(c){
   $('#posdl').innerHTML=h;
 }
 function renderMini(c){
-  const my=$('#e-pos').value.trim().toUpperCase();
+  const mine=new Set(posList($('#e-pos').value));
   const occ=occupiedMap(c);
   const g=$('#e-minigrid');
   g.style.gridTemplateColumns=`16px repeat(9,1fr)`;
@@ -1203,16 +1249,31 @@ function renderMini(c){
     h+=`<div class="bh">${r}</div>`;
     for(let i=0;i<9;i++){
       const p=AZ[i]+r;
-      const cls=p===my?'me':(occ[p]?'full':'');
-      h+=`<div class="bc ${cls}" data-mp="${p}" title="${p}${occ[p]?' — 사용 중':''}"></div>`;
+      const cls=mine.has(p)?'me':(occ[p]?'full':'');
+      h+=`<div class="bc ${cls}" data-mp="${p}" title="${p}${occ[p]?' — 다른 표본이 사용 중':mine.has(p)?' — 선택됨 (다시 누르면 해제)':''}"></div>`;
     }
   }
   g.innerHTML=h;
   /* click이 아니라 mousedown — 입력칸 blur 재렌더가 클릭을 삼키는 것을 방지 */
   $$('#e-minigrid .bc').forEach(d=>d.onmousedown=ev=>{
     ev.preventDefault();
-    $('#e-pos').value=d.dataset.mp; renderMini(c);
+    const p=d.dataset.mp, cur=posList($('#e-pos').value);
+    const i=cur.indexOf(p);
+    if(i>=0)cur.splice(i,1); else cur.push(p);          /* 토글 — 여러 칸 선택 */
+    $('#e-pos').value=posNorm(cur.join(' '));
+    renderMini(c); posHint(c);
   });
+  posHint(c);
+}
+/* 몇 칸을 골랐는지 알려준다 */
+function posHint(c){
+  const L=posList($('#e-pos').value), n=$('#e-poshint');
+  if(!n)return;
+  const occ=occupiedMap(c||{id:boxNorm($('#e-cont').value,$('#e-pres').value)});
+  const bad=L.filter(p=>occ[p]);
+  n.textContent=!L.length?'격자를 눌러 고르거나 A2-E2 처럼 입력하십시오 (여러 칸 가능)'
+    :`${L.length}칸 선택 — ${posShort(L.join(' '))}`+(bad.length?` · ${bad.join(', ')}는 다른 표본이 쓰는 중`:'');
+  n.style.color=bad.length?'var(--bad)':'';
 }
 $('#e-cont').addEventListener('input',contChanged);
 $('#e-cont').addEventListener('blur',()=>{
@@ -1220,7 +1281,12 @@ $('#e-cont').addEventListener('blur',()=>{
   if(nv!==$('#e-cont').value){$('#e-cont').value=nv; contChanged();}});
 $('#e-pos').addEventListener('input',()=>{const id=boxNorm($('#e-cont').value,$('#e-pres').value);
   if(id)renderMini(allContainers().find(x=>x.id===id)||{id,type:'grid'});});
-$('#e-pos').addEventListener('blur',()=>{$('#e-pos').value=$('#e-pos').value.trim().toUpperCase();});
+$('#e-pos').addEventListener('blur',()=>{
+  const n=posNorm($('#e-pos').value);
+  if(n)$('#e-pos').value=n;                       /* 형식이 맞는 것만 정형화 — 오타는 그대로 두어 저장 시 걸린다 */
+  const id=boxNorm($('#e-cont').value,$('#e-pres').value);
+  if(id)renderMini(allContainers().find(x=>x.id===id)||{id,type:'grid'});
+});
 $('#e-pres').addEventListener('change',()=>{
   /* 보존형태가 바뀌면 접두어가 어긋난 박스 번호는 비운다 */
   const v=$('#e-cont').value.trim().toUpperCase();
@@ -1472,8 +1538,15 @@ function detOptions(sel){
 $('#e-det').addEventListener('change',()=>{
   const v=$('#e-det').value;
   $('#e-det2').style.display=v==='__c'?'':'none';
-  if(v==='__c'){$('#e-det2').focus();return;}
-  const en=detNames().get(v); if(en)$('#e-deten').value=en;
+  if(v==='__c'){$('#e-det2').focus();$('#e-deten').value='';delete $('#e-deten').dataset.touched;return;}
+  const en=detNames().get(v)||korToEn(v);            /* 아는 이름이 없으면 한글에서 만든다 */
+  if(en){$('#e-deten').value=en;delete $('#e-deten').dataset.touched;}
+});
+/* 직접 입력한 한글 이름 → 영문 자동 (영문칸을 직접 고친 뒤에는 건드리지 않음) */
+$('#e-det2').addEventListener('input',()=>{
+  const en=$('#e-deten'); if(en.dataset.touched)return;
+  const v=detNames().get($('#e-det2').value.trim())||korToEn($('#e-det2').value);
+  if(v)en.value=v;
 });
 const detValue=()=>$('#e-det').value==='__c'?$('#e-det2').value.trim():$('#e-det').value;
 
@@ -1496,8 +1569,14 @@ function collOptions(sel){
 $('#e-coll').addEventListener('change',()=>{
   const v=$('#e-coll').value;
   $('#e-coll2').style.display=v==='__c'?'':'none';
-  if(v==='__c'){$('#e-coll2').focus();return;}
-  const en=collNames().get(v); if(en)$('#e-collen').value=en;
+  if(v==='__c'){$('#e-coll2').focus();$('#e-collen').value='';delete $('#e-collen').dataset.touched;return;}
+  const en=collNames().get(v)||korToEn(v);
+  if(en){$('#e-collen').value=en;delete $('#e-collen').dataset.touched;}
+});
+$('#e-coll2').addEventListener('input',()=>{
+  const en=$('#e-collen'); if(en.dataset.touched)return;
+  const v=collNames().get($('#e-coll2').value.trim())||korToEn($('#e-coll2').value);
+  if(v)en.value=v;
 });
 const collValue=()=>$('#e-coll').value==='__c'?$('#e-coll2').value.trim():$('#e-coll').value;
 
@@ -1572,6 +1651,8 @@ function fillEntry(no){
   editLog=s?JSON.parse(JSON.stringify(s.log||[])):[];
   $('#lg-date').value=today(); renderLog();
   v('#e-search',''); closeAC();
+  delete $('#e-collen').dataset.touched; delete $('#e-deten').dataset.touched;
+  paintMethods();
   $('#e-flags').innerHTML='<span class="hint">종을 고르면 표시됩니다</span>';
   siteOptions(s?s.site_id:lastSiteId());
 }
@@ -1595,11 +1676,14 @@ function saveRec(){
   const cont=boxNorm($('#e-cont').value,$('#e-pres').value);
   const contType=cont?((allContainers().find(c=>c.id===cont)||{}).type
     ||($('#e-pres').value==='wet'?'grid':'free')):'';
-  const pos=contType==='grid'?$('#e-pos').value.trim().toUpperCase():'';
-  if(contType==='grid'&&pos){
-    if(!/^[A-I][1-9]$/.test(pos)){say(`칸 위치는 A1~I9 형식입니다. (입력값: ${pos})`,'bad');return null;}
-    const clash=DB.spec.find(s=>s.container===cont&&s.position===pos&&s.no!==editing);
-    if(clash){say(`${cont} ${pos} 칸은 ${clash.no} 가 쓰고 있습니다.`,'bad');return null;}
+  const raw=contType==='grid'?$('#e-pos').value.trim():'';
+  const pos=contType==='grid'?posNorm(raw):'';
+  if(contType==='grid'&&raw){
+    if(!pos){say(`칸 위치는 A1~I9 형식입니다. 여러 칸은 A2-E2 또는 A2 B2 C2 처럼 적으십시오. (입력값: ${raw})`,'bad');return null;}
+    for(const p of posList(pos)){
+      const clash=DB.spec.find(s=>s.container===cont&&s.no!==editing&&posList(s.position).includes(p));
+      if(clash){say(`${cont} ${p} 칸은 ${clash.no} 가 쓰고 있습니다.`,'bad');return null;}
+    }
   }
   const rec={
     no, legacy_no:(old&&old.legacy_no)||null,
@@ -1633,7 +1717,7 @@ function saveRec(){
   go('entry',rec.no,true);
   $('#e-title').textContent=`표본 ${rec.no}`; $('#e-del').style.display=$('#e-del2').style.display='';
   $('#e-splitwrap').style.display='';
-  const bn=say(rec.container?`${rec.no} 저장 — ${rec.container}${rec.position?' '+rec.position:''} 에 들어갔습니다.`:`${rec.no} 저장했습니다.`);
+  const bn=say(rec.container?`${rec.no} 저장 — ${rec.container}${rec.position?' '+posShort(rec.position):''} 에 들어갔습니다.`:`${rec.no} 저장했습니다.`);
   const sv=document.createElement('button'); sv.className='btn sm pri'; sv.textContent='지금 동기화';
   sv.onclick=()=>{bn.classList.remove('on');$('#save').click();};
   $('#bacts').append(sv);
@@ -1840,6 +1924,70 @@ $('#sp-go').onclick=()=>{
   fillEntry(s.no);
 };
 
+/* ─── 채집방법 — 칩으로 바로 교체 ───────────────────────────
+   datalist는 칸에 값이 있으면 후보가 걸러져 다른 방법이 안 보였다(사용자 지적).
+   칩은 값이 무엇이든 한 번에 바꿔 끼운다. */
+const METHODS=[['LT','등화채집'],['SW','스위핑'],['MA','말레이즈트랩'],['PT','핏폴트랩'],
+  ['BE','베이팅'],['HC','직접채집'],['MT','수반트랩'],['YP','황색수반']];
+function paintMethods(){
+  const cur=$('#e-method').value.trim().toUpperCase();
+  $('#e-mchips').innerHTML=METHODS.map(([c,k])=>
+    `<button type="button" data-m="${c}" title="${esc(k)}" class="${cur===c?'on':''}">${c} <span style="opacity:.7">${esc(k)}</span></button>`).join('')
+    +(cur?`<button type="button" data-m="" title="비우기" style="opacity:.75">× 지우기</button>`:'');
+  $$('#e-mchips button').forEach(b=>b.onclick=()=>{
+    $('#e-method').value=b.dataset.m; paintMethods();});
+}
+$('#e-method').addEventListener('input',paintMethods);
+
+/* ─── 한글 이름 → 영문 표기 ─────────────────────────────────
+   이재호 → JH Lee, 박상욱 → SW Park. 성은 관용 표기표, 이름은 각 음절 첫 글자.
+   ㅇ+ㅜ 계열(우·욱·운·웅…)은 관용상 W로 적으므로 예외 처리한다. */
+const SURNAME={'김':'Kim','이':'Lee','박':'Park','최':'Choi','정':'Jung','강':'Kang','조':'Cho',
+ '윤':'Yoon','장':'Jang','임':'Lim','한':'Han','오':'Oh','서':'Seo','신':'Shin','권':'Kwon',
+ '황':'Hwang','안':'Ahn','송':'Song','전':'Jeon','홍':'Hong','유':'Yoo','고':'Ko','문':'Moon',
+ '양':'Yang','손':'Son','배':'Bae','백':'Baek','허':'Heo','남':'Nam','심':'Sim','노':'Noh',
+ '하':'Ha','곽':'Kwak','성':'Sung','차':'Cha','주':'Joo','우':'Woo','구':'Koo','민':'Min',
+ '류':'Ryu','나':'Na','진':'Jin','지':'Ji','엄':'Eom','채':'Chae','원':'Won','천':'Chun',
+ '방':'Bang','공':'Kong','현':'Hyun','함':'Ham','변':'Byun','염':'Yeom','여':'Yeo','추':'Chu',
+ '도':'Do','소':'So','석':'Seok','선':'Sun','설':'Seol','마':'Ma','길':'Gil','위':'Wi',
+ '표':'Pyo','명':'Myung','기':'Ki','반':'Ban','라':'Ra','왕':'Wang','금':'Keum','옥':'Ok',
+ '육':'Yook','인':'In','맹':'Maeng','제':'Je','모':'Mo','편':'Pyun','탁':'Tak','국':'Kook',
+ '어':'Eo','은':'Eun','피':'Pi','강전':'Kangjeon',
+ '남궁':'Namgoong','선우':'Sunwoo','황보':'Hwangbo','제갈':'Jegal','사공':'Sagong','독고':'Dokgo',
+ '서문':'Seomun','동방':'Dongbang'};
+const DOUBLE=['남궁','선우','황보','제갈','사공','독고','서문','동방'];
+/* 한 음절의 로마자 — 관용 표기 우선 */
+function sylRoman(ch){
+  const c=ch.charCodeAt(0)-0xAC00;
+  if(c<0||c>=11172)return ch;
+  const cho=Math.floor(c/588), jung=Math.floor((c%588)/28), jong=c%28;
+  if(cho===11&&jung===13)return 'w'+JUNG[jung]+JONG[jong];     /* 우·욱·운·웅 → Woo/Wook… */
+  return CHO[cho]+JUNG[jung]+JONG[jong];
+}
+function korToEn(name){
+  const n=String(name||'').trim().replace(/\s+/g,'');
+  if(!n||!/^[가-힣]{2,6}$/.test(n))return '';                  /* 한글 이름이 아니면 손대지 않는다 */
+  const two=DOUBLE.includes(n.slice(0,2));
+  const sur=n.slice(0,two?2:1), given=n.slice(two?2:1);
+  if(!given)return '';
+  const fam=SURNAME[sur]||(r=>r?r[0].toUpperCase()+r.slice(1):'')(
+    [...sur].map(sylRoman).join(''));
+  const ini=[...given].map(ch=>{const r=sylRoman(ch);return r?r[0].toUpperCase():'';}).join('');
+  return ini?`${ini} ${fam}`:fam;
+}
+/* 한글 칸을 채우면 영문 칸이 비어 있을 때만 자동으로 만든다 (직접 고친 값은 건드리지 않음) */
+function autoEn(korSel,enSel){
+  const en=$(enSel); if(en.dataset.touched)return;
+  const v=korToEn(typeof korSel==='function'?korSel():$(korSel).value);
+  if(v)en.value=v;
+}
+['#e-collen','#e-deten','#c-collen'].forEach(x=>{const el=$(x);
+  if(el)el.addEventListener('input',()=>{el.dataset.touched=el.value.trim()?'1':'';});});
+$('#c-coll').addEventListener('input',()=>{
+  const en=$('#c-collen'); if(en.dataset.touched)return;
+  const v=korToEn($('#c-coll').value); if(v)en.value=v;
+});
+
 /* 새 지점 입력 보조 */
 const REGMAP={'서울특별시':'서울','인천광역시':'인천','경기도':'경기','강원도':'강원','강원특별자치도':'강원',
   '세종특별자치시':'세종','대전광역시':'대전','충청북도':'충북','충청남도':'충남','전라북도':'전북',
@@ -1942,15 +2090,15 @@ function renderBox(){
     ${c.place?`<span class="tag">위치: ${esc(c.place)}</span>`:''}
     ${c.note?`<span class="hint">${esc(c.note)}</span>`:''}</div>`;
   if(c.type==='grid'){
-    const used=new Set([...inBox.map(s=>s.position),...parts.map(s=>s.exp.gen_pos)].filter(Boolean));
+    const used=new Set([...inBox.flatMap(s=>posList(s.position)),...parts.flatMap(s=>posList(s.exp.gen_pos))].filter(Boolean));
     $('#b-info').textContent=`${used.size}칸 사용 / 81 · 표본 ${inBox.length}건${parts.length?` · 생식기 ${parts.length}건`:''}`;
     let g=`<div class="boxgrid" style="grid-template-columns:22px repeat(9,1fr);max-width:520px">`;
     g+='<div class="bh"></div>'+[...Array(9)].map((_,i)=>`<div class="bh">${AZ[i]}</div>`).join('');
     for(let r=1;r<=9;r++){
       g+=`<div class="bh">${r}</div>`;
       for(let i=0;i<9;i++){
-        const p=AZ[i]+r, occ=inBox.filter(s=>s.position===p);
-        const pp=parts.filter(s=>s.exp.gen_pos===p);
+        const p=AZ[i]+r, occ=inBox.filter(s=>posList(s.position).includes(p));
+        const pp=parts.filter(s=>posList(s.exp.gen_pos).includes(p));
         const tt=[...occ.map(s=>s.kor||s.sci||s.no),...pp.map(s=>`생식기: ${s.no}`)];
         g+=`<div class="bc ${(occ.length||pp.length)?'full':''}" data-p="${p}" title="${tt.length?esc(tt.join(', ')):p}">${(occ.length+pp.length)||''}</div>`;
       }
@@ -1962,8 +2110,8 @@ function renderBox(){
     $$('#bview .bc').forEach(d=>d.onmousedown=ev=>{
       ev.preventDefault();
       $$('#bview .bc').forEach(x=>x.classList.remove('sel')); d.classList.add('sel');
-      const occ=inBox.filter(s=>String(s.position)===String(d.dataset.p));
-      const pp=parts.filter(s=>String(s.exp.gen_pos)===String(d.dataset.p));
+      const occ=inBox.filter(s=>posList(s.position).includes(d.dataset.p));
+      const pp=parts.filter(s=>posList(s.exp.gen_pos).includes(d.dataset.p));
       const ppl=pp.length?`<p style="margin-top:8px"><b>생식기 부속</b> — ${pp.map(s=>`<a class="lnk mono" data-edit2="${esc(s.no)}">${esc(s.no)}</a> <span class="hint">${esc(s.kor||s.sci||'')}</span>`).join(' · ')}</p>`:'';
       $('#b-detail').innerHTML=(occ.length||pp.length)
         ?`<b>${esc(boxSel)} — ${esc(d.dataset.p)}</b>`+(occ.length?specTable(occ):'')+ppl
@@ -2150,7 +2298,7 @@ const PVSTEP=[.25,.35,.5,.7,1,1.4,2,3,4,6];
 let pvUser=null;                       /* null = 화면 폭에 맞춤 */
 function pvNow(){
   const w=$('#sheetwrap'); const mm=210*(96/25.4);
-  const avail=w?w.clientWidth-2:0;
+  const avail=w?w.clientWidth-22:0;      /* padding 10 + 스크롤바 여유 */
   const fit=avail>0?Math.min(1,Math.max(.2,avail/mm)):1;
   return pvUser||fit;
 }
@@ -2534,7 +2682,7 @@ function renderDossier(no){
   const expTxt=[s.exp.dissect?'해부(생식기)':'',s.exp.dna?'DNA 추출':'',s.exp.photo?'사진 촬영':''].filter(Boolean).join(' · ')
     +(s.exp.gen_cont?` — 생식기 별도 보관: ${s.exp.gen_cont}${s.exp.gen_pos?' '+s.exp.gen_pos:''}`:'');
   const keep=[PRES[s.preservation]||'',SEX[s.sex]?SEX[s.sex]+' ':'',`${s.count||0}개체`,
-    s.container?`— ${s.container}${s.position?' '+s.position:''}`:'— 보관함 미지정'].join(' ');
+    s.container?`— ${s.container}${s.position?' '+posShort(s.position):''}`:'— 보관함 미지정'].join(' ');
 
   /* 일지 — 기록 + 동정일 + 라벨 출력을 시간순으로 합친다 */
   const tl=[];
@@ -2793,6 +2941,7 @@ function consumeSetup(){
   $('#c-owner').value=d.o; $('#c-repo').value=d.r; $('#c-branch').value=d.b||'main';
   $('#c-token').value=d.t;
   if(d.c)$('#c-coll').value=d.c; if(d.e)$('#c-collen').value=d.e; if(d.p)$('#c-prefix').value=d.p;
+  
   saveCfg(); say('이 기기에 설정을 적용했습니다 — 자료를 불러옵니다.');
   return true;
 }
