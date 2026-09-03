@@ -684,7 +684,7 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
     <button class="btn sm mono" id="pv-in" title="확대 (Ctrl + 휠 위)">＋</button>
     <button class="btn sm" id="pv-fit">화면 맞춤</button>
     <button class="btn sm" id="pv-100">실제 크기</button>
-    <span class="hint">화면에서 크게 볼 뿐, 인쇄 크기는 달라지지 않습니다.</span>
+    <span class="hint">휠로 확대 · 확대된 상태에서 끌어서 이동 — 인쇄 크기는 달라지지 않습니다.</span>
   </div>
   <div id="sheetwrap"><div id="sheet"><div id="sheetin"></div></div></div>
 </section>
@@ -784,6 +784,20 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
   </div>
 
   <div class="card">
+    <div class="card-h">공유용 파일 만들기</div>
+    <div class="card-b">
+    <p class="hint" style="margin-bottom:10px">지금 화면에 올라와 있는 표본·지점·보관함 자료를 <b>단일 HTML 한 개</b>로 굽습니다.
+      받은 사람은 더블클릭만 하면 목록·보관함·지도·검색·라벨 출력까지 그대로 쓸 수 있고, 인터넷도 GitHub 계정도 필요 없습니다.
+      <b>토큰과 GitHub 설정은 들어가지 않으며</b>, 받은 쪽에서는 편집·동기화가 잠깁니다(내려받은 시점으로 고정).</p>
+    <div class="rowflex">
+      <button class="btn pri" id="c-snap">공유용 스냅샷 내려받기</button>
+      <label class="rowflex" style="gap:5px;font-size:12.5px"><input type="checkbox" id="c-snapchk" style="width:auto">종목록도 넣기 (파일이 매우 커집니다)</label>
+      <span class="hint" id="c-snapinfo"></span>
+    </div>
+    </div>
+  </div>
+
+  <div class="card">
     <div class="card-h">기본값</div>
     <div class="card-b">
     <div class="grid g4">
@@ -806,6 +820,9 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
   <span>종목록: 국가생물종목록 (국립생물자원관, 연 1회 갱신)</span>
 </div></footer>
 
+<div id="snapbar" class="noprint" style="display:none;background:var(--warn-l);border-bottom:1px solid #e6d27a;
+  padding:8px 20px;font-size:12.5px;color:#6b4e00;text-align:center"></div>
+
 <div class="banner" id="banner"><span id="btext"></span><span id="bacts" class="rowflex"></span>
   <button class="btn sm" onclick="document.getElementById('banner').classList.remove('on')">닫기</button></div>
 
@@ -817,7 +834,7 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const sciFmt=s=>esc(s).replace(/([()])/g,'<span class="rm">$1</span>');
 
 /* ─────── 상태 ─────── */
-const BUILD='2026-08-28 · v28';
+const BUILD='2026-08-28 · v30';
 const DB={spec:[],site:[],chk:[],cont:[]};
 const SHA={};
 let CFG={owner:'',repo:'',branch:'main',store:'local',token:'',
@@ -2324,6 +2341,29 @@ $('#pv-100').onclick=()=>pvSet(1);
 $('#sheetwrap').addEventListener('wheel',e=>{
   e.preventDefault(); pvStep(e.deltaY<0?1:-1);
 },{passive:false});
+/* 확대해서 넘칠 때는 끌어서 이동 — 스크롤바를 잡지 않아도 된다 */
+(function(){
+  const w=$('#sheetwrap'); let drag=null;
+  const over=()=>w.scrollWidth>w.clientWidth+1||w.scrollHeight>w.clientHeight+1;
+  w.addEventListener('pointerdown',e=>{
+    if(e.button!==0||!over())return;
+    drag={x:e.clientX,y:e.clientY,l:w.scrollLeft,t:w.scrollTop,id:e.pointerId};
+    try{w.setPointerCapture(e.pointerId);}catch(_){}
+    w.style.cursor='grabbing'; e.preventDefault();
+  });
+  w.addEventListener('pointermove',e=>{
+    if(!drag){ w.style.cursor=over()?'grab':''; return; }
+    w.scrollLeft=drag.l-(e.clientX-drag.x);
+    w.scrollTop =drag.t-(e.clientY-drag.y);
+    e.preventDefault();
+  });
+  const end=e=>{ if(!drag)return;
+    try{w.releasePointerCapture(drag.id);}catch(_){}
+    drag=null; w.style.cursor=over()?'grab':''; };
+  w.addEventListener('pointerup',end);
+  w.addEventListener('pointercancel',end);
+  w.addEventListener('pointerleave',()=>{if(!drag)w.style.cursor='';});
+})();
 window.addEventListener('resize',fitPreview);
 
 /* ═══════════ 지도 — 채집지점을 좌표로 한눈에 ═══════════
@@ -2562,8 +2602,17 @@ function fqSearch(){
     e.n++; e.ind+=s.count||0; tx.set(k,e);
   });
   const txRows=[...tx.entries()].sort((a,b)=>b[1].n-a[1].n).slice(0,3);
+  /* 속 단위 — Xestocephalus 처럼 속명만 쳤을 때 그 속 전체를 묶어 제안한다 */
+  const gx=new Map();
+  all.forEach(sp=>{const g=genusOf(sp); if(!g||!g.toLowerCase().includes(q))return;
+    const e=gx.get(g)||{n:0,ind:0,sp:new Set()};
+    e.n++; e.ind+=sp.count||0; e.sp.add(`${sp.kor}|${sp.sci}`); gx.set(g,e);});
+  const gRows=[...gx.entries()].filter(([g,e])=>e.sp.size>1||!tx.size)
+    .sort((a,b)=>b[1].n-a[1].n).slice(0,2);
   const hits=all.slice(0,15);
-  L.innerHTML=txRows.map(([k,e])=>`<div class="ac-item" data-tx="${esc(k)}" style="background:var(--subtle)">
+  L.innerHTML=gRows.map(([g,e])=>`<div class="ac-item" data-gx="${esc(g)}" style="background:var(--accent-l)">
+      <b class="sci">${esc(g)}</b> <span class="m">속 전체 보기 — ${e.sp.size}종 · ${e.n}건 · ${e.ind}개체 · 종별 통계</span></div>`).join('')
+    +txRows.map(([k,e])=>`<div class="ac-item" data-tx="${esc(k)}" style="background:var(--subtle)">
       <b>${esc(e.kor||'')}</b> <span class="sci">${sciFmt(e.sci)}</span>
       <span class="m">종 전체 보기 — ${e.n}건 · ${e.ind}개체 · 채집지 지도</span></div>`).join('')
     +hits.map(s=>`<div class="ac-item" data-no="${esc(s.no)}">
@@ -2575,6 +2624,67 @@ function fqSearch(){
   $$('#fq-list .ac-item[data-tx]').forEach(d=>d.onclick=()=>{
     L.classList.remove('on'); renderTaxonDossier(d.dataset.tx);
   });
+  $$('#fq-list .ac-item[data-gx]').forEach(d=>d.onclick=()=>{
+    L.classList.remove('on'); renderGenusDossier(d.dataset.gx);
+  });
+}
+
+/* ─── 속 단위 이력서 — 속 전체 요약 + 그 안의 종별 통계 ─── */
+function renderGenusDossier(genus){
+  const specs=DB.spec.filter(s=>genusOf(s)===genus);
+  const D=$('#dossier');
+  if(!specs.length){D.innerHTML='<p class="hint" style="margin-top:14px">해당 속의 표본이 없습니다.</p>';return;}
+  const bySite=new Map();
+  specs.forEach(s=>{const id=s.site_id||'__none';
+    const e=bySite.get(id)||{n:0,ind:0,nos:[]};
+    e.n++; e.ind+=s.count||0; e.nos.push(s); bySite.set(id,e);});
+  const mapItems=[...bySite.entries()].map(([id,e])=>({st:id==='__none'?null:siteOf(id),n:e.ind}))
+    .filter(x=>x.st&&x.st.lon!=null&&x.st.lat!=null);
+  /* 종별 통계 */
+  const bySp=new Map();
+  specs.forEach(s=>{const k=`${s.kor}|${s.sci}`;
+    const e=bySp.get(k)||{kor:s.kor,sci:s.sci,n:0,ind:0,m:0,f:0,sites:new Set(),months:{},els:[]};
+    e.n++; e.ind+=s.count||0;
+    if(s.sex==='M')e.m+=s.count||0; else if(s.sex==='F')e.f+=s.count||0;
+    if(s.site_id)e.sites.add(s.site_id);
+    const iso=fromRoman(s.date); if(iso)e.months[+iso.slice(5,7)]=(e.months[+iso.slice(5,7)]||0)+(s.count||1);
+    const st=siteOf(s.site_id); if(st&&st.elev!=null)e.els.push(st.elev);
+    bySp.set(k,e);});
+  const rows=[...bySp.entries()].sort((a,b)=>b[1].ind-a[1].ind);
+  const fam=specs[0].family_ko||specs[0].family_la||'';
+  const ind=specs.reduce((a,s)=>a+(s.count||0),0);
+  const mon=o=>{const t=Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,2).map(a=>RN[+a[0]]);
+    return t.length?t.join('·')+'월':'—';};
+  const elr=e=>e.els.length?`${Math.min(...e.els)}–${Math.max(...e.els)}m`:'—';
+  const tbl=`<div class="tbl-wrap" style="border:0"><table>
+    <thead><tr><th>종</th><th class="c">표본</th><th class="c">개체</th><th class="c">♂</th><th class="c">♀</th>
+      <th class="c">지점</th><th class="c">주 출현</th><th class="c">고도</th></tr></thead>
+    <tbody>${rows.map(([k,e])=>`<tr>
+      <td><a class="lnk" data-tx="${esc(k)}">${esc(e.kor||'')} <span class="sci">${sciFmt(e.sci)}</span></a></td>
+      <td class="c mono">${e.n}</td><td class="c mono">${e.ind}</td>
+      <td class="c mono">${e.m||''}</td><td class="c mono">${e.f||''}</td>
+      <td class="c mono">${e.sites.size}</td><td class="c">${esc(mon(e.months))}</td>
+      <td class="c mono">${esc(elr(e))}</td></tr>`).join('')}</tbody></table></div>`;
+  D.innerHTML=`
+  <div class="card">
+    <div class="card-h" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span class="sci" style="font-size:16px">${esc(genus)}</span><span class="tag">속</span>
+      ${fam?`<span class="tag">${esc(fam)}</span>`:''}
+      <span class="hint">${rows.length}종 · 표본 ${specs.length}건 · ${ind}개체 · 지점 ${[...bySite.keys()].filter(x=>x!=='__none').length}곳</span>
+    </div>
+    <div class="card-b">
+      <div class="grid g2" style="gap:16px 26px;align-items:start">
+        <div><span class="fl">속 전체 요약</span>${summaryHTML(specs,bySite)}</div>
+        <div>${(mapItems.length&&window.L)?'<div id="fmap"></div>':'<p class="hint">좌표 있는 지점이 없어 지도를 표시할 수 없습니다.</p>'}</div>
+      </div>
+      <div style="margin-top:16px;border-top:1px solid var(--border-2);padding-top:12px">
+        <span class="fl">종별 통계 — 종을 누르면 그 종의 이력서로</span>
+        ${tbl}
+      </div>
+    </div>
+  </div>`;
+  $$('#dossier [data-tx]').forEach(a=>a.onclick=()=>renderTaxonDossier(a.dataset.tx));
+  miniMapMulti(mapItems);
 }
 
 /* ─── 종 단위 이력서 — 몇 번이, 어디에서, 언제 ─── */
@@ -3109,11 +3219,89 @@ $('#c-save').onclick=saveCfg; $('#c-save2').onclick=saveCfg;
   $('#c-inst').value=CFG.inst||'';
 })();
 
+/* ═══════════ 공유용 스냅샷 ═══════════
+   이 파일(index.html) 자체를 통째로 읽어, 자료를 담은 JSON 블록 하나를 body 끝에 붙여
+   새 HTML로 만든다. 토큰·GitHub 설정은 절대 담지 않는다.
+   주의 — 태그 문자열을 소스에 통째로 쓰면 이 주석까지 나중에 정규식에 걸린다.
+   그래서 조각으로 이어 붙여 소스 어디에도 그 문자열이 남지 않게 한다. */
+const SNAPTAG='snap'+'data';
+const SNAPOPEN='<scr'+'ipt id="'+SNAPTAG+'" type="application/json">';
+const SNAPCLOSE='</scr'+'ipt>';
+const SNAPBODY='</bo'+'dy>';
+function snapSize(n){return n<1024?n+' B':n<1048576?(n/1024).toFixed(0)+' KB':(n/1048576).toFixed(1)+' MB';}
+$('#c-snap').onclick=async()=>{
+  if(!DB.spec.length)return say('내보낼 표본이 없습니다 — 먼저 자료를 불러오십시오.','warn');
+  const btn=$('#c-snap'); btn.disabled=true; $('#c-snapinfo').textContent='만드는 중…';
+  try{
+    /* 지금 실행 중인 이 페이지의 원본 HTML을 그대로 가져온다 */
+    const r=await fetch(location.href.split('#')[0]);
+    if(!r.ok)throw new Error('원본 파일을 읽지 못했습니다');
+    let html=await r.text();
+    /* 이미 스냅샷인 파일에서 또 굽는 경우 — 옛 자료 블록만 정확히 도려낸다 (정규식 금지) */
+    const oi=html.indexOf(SNAPOPEN);
+    if(oi>=0){
+      const oj=html.indexOf(SNAPCLOSE,oi);
+      if(oj>=0)html=html.slice(0,oi)+html.slice(oj+SNAPCLOSE.length);
+    }
+    const payload={
+      at:new Date().toISOString(), by:CFG.coll||'', build:BUILD,
+      spec:DB.spec, site:DB.site, cont:DB.cont,
+      chk:$('#c-snapchk').checked?DB.chk:[]
+    };
+    /* 닫는 태그가 자료 안에 있어도 블록이 끊기지 않게 */
+    const json=JSON.stringify(payload).replace(/<\//g,'<\\/');
+    const tag=SNAPOPEN+json+SNAPCLOSE+'\n';
+    /* body 닫는 태그도 조각으로 — 소스에 통째로 두면 자기 코드가 먼저 걸린다 */
+    const bi=html.lastIndexOf(SNAPBODY);
+    if(bi<0)throw new Error('원본 형식을 알아보지 못했습니다');
+    html=html.slice(0,bi)+tag+html.slice(bi);
+    /* 마지막 안전장치 — 토큰이 섞여 들어갔는지, 블록이 하나만 있는지 */
+    const tok=(CFG.token||'').trim();
+    if(tok&&tok.length>8&&html.includes(tok))throw new Error('토큰이 섞여 들어가 중단했습니다');
+    if(html.split(SNAPOPEN).length!==2)throw new Error('자료 블록이 정상적으로 하나가 아닙니다');
+    const name=`표본-스냅샷-${new Date().toISOString().slice(0,10)}.html`;
+    const b=new Blob([html],{type:'text/html;charset=utf-8'});
+    const u=URL.createObjectURL(b), a=document.createElement('a');
+    a.href=u; a.download=name; a.click(); URL.revokeObjectURL(u);
+    $('#c-snapinfo').textContent=`${name} — ${snapSize(b.size)} · 표본 ${DB.spec.length}건`;
+    say(`공유용 파일을 내려받았습니다 (${snapSize(b.size)}). 토큰은 들어 있지 않습니다.`);
+  }catch(e){
+    $('#c-snapinfo').textContent='';
+    say('스냅샷을 만들지 못했습니다 — '+(e.message||e)+
+      (location.protocol==='file:'?' (파일을 직접 연 경우 브라우저가 원본 읽기를 막습니다. 웹 주소로 열어 시도하십시오.)':''),'bad');
+  }
+  btn.disabled=false;
+};
+/* 받은 쪽 — 읽기 전용으로 잠근다 */
+function snapLoad(){
+  const el=document.getElementById(SNAPTAG);
+  if(!el)return null;
+  let d=null; try{d=JSON.parse(el.textContent);}catch(e){return null;}
+  if(!d||!Array.isArray(d.spec))return null;
+  DB.spec=d.spec.map(normSpec); DB.site=d.site||[]; DB.cont=(d.cont||[]).map(normCont);
+  if(d.chk&&d.chk.length)DB.chk=d.chk;
+  CFG.owner=CFG.repo=CFG.token='';                    /* 혹시 남아 있어도 쓰지 않는다 */
+  const t=String(d.at||'').slice(0,10);
+  $('#snapbar').style.display='';
+  $('#snapbar').innerHTML=`<b>읽기 전용 스냅샷</b> — ${esc(t)} 기준으로 굳은 사본입니다`
+    +(d.by?` (${esc(d.by)} 제공)`:'')+`. 표본 ${DB.spec.length}건 · 목록·보관함·지도·검색·라벨 출력은 그대로 쓸 수 있고, 편집과 동기화는 잠겨 있습니다.`;
+  ['[data-v="entry"]','[data-v="boxin"]','[data-v="conf"]'].forEach(q=>{
+    const b=document.querySelector('.gnb '+q); if(b)b.style.display='none';});
+  ['#save','#sel-del'].forEach(q=>{const n=$(q); if(n)n.style.display='none';});
+  $('#status').textContent='스냅샷';
+  document.title='곤충 표본 — 읽기 전용 스냅샷';
+  return d;
+}
+
 /* 시동 */
 (async function boot(){
+  /* 스냅샷 자료 블록은 이 스크립트보다 뒤에 붙으므로 파싱이 끝날 때까지 기다린다 */
+  if(document.readyState==='loading')
+    await new Promise(r=>document.addEventListener('DOMContentLoaded',r,{once:true}));
   applyK(); $('#ct-type').dispatchEvent(new Event('change'));
   $('#lg-date').value=today(); noHint();
-  const cached=await idbGet();
+  const snap=snapLoad();
+  const cached=snap&&DB.chk.length?null:await idbGet();
   if(cached&&cached.rows&&cached.rows.length){DB.chk=cached.rows;}
   else{
     for(const p of ['data/checklist.jsonl','checklist.jsonl']){
@@ -3122,6 +3310,7 @@ $('#c-save').onclick=saveCfg; $('#c-save2').onclick=saveCfg;
   }
   $('#build').textContent=BUILD; $('#build2').textContent=BUILD;
   cacheInfo(); showSyncStamp();
+  if(snap){ afterLoad(); go('list',null,true); return; }   /* 스냅샷 — 여기서 끝 */
   const setup=consumeSetup();
   fromHash();
   if(CFG.owner&&CFG.repo&&CFG.token){$('#c-pull').click();}
