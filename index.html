@@ -784,6 +784,34 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
   </div>
 
   <div class="card">
+    <div class="card-h">자동 백업 · 되돌리기</div>
+    <div class="card-b">
+    <p class="hint" style="margin-bottom:10px">불러오기 직전·직후, 덮어쓰기 직전, 커밋 직후, 표본 저장 직후에
+      이 브라우저 안에 자동으로 스냅샷이 남습니다(최근 40개). 동기화가 잘못되거나 실수로 지웠을 때
+      여기서 그 시점으로 되돌리거나 파일로 빼낼 수 있습니다. GitHub 커밋 이력과 별개로 도는 두 번째 그물입니다.</p>
+    <div class="rowflex" style="margin-bottom:10px">
+      <button class="btn" id="bk-now">지금 백업</button>
+      <button class="btn" id="bk-refresh">목록 새로고침</button>
+      <span class="hint">되돌리기는 화면에만 반영되며, 확인 후 동기화를 눌러야 GitHub에 올라갑니다.</span>
+    </div>
+    <div id="bk-list"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-h">채집지점 영문 표기 다시 만들기</div>
+    <div class="card-b">
+    <p class="hint" style="margin-bottom:10px">행정구역 접미사 앞에 붙임표를 넣는 규칙(<b>Bonggap-ri · Sinpung-myeon · Gongju-si</b>)으로
+      한글 주소에서 영문 표기를 다시 만듭니다. 먼저 미리보기로 바뀔 곳을 확인하고 적용하십시오.
+      직접 손본 표기까지 덮으므로, 바꾸고 싶지 않은 곳이 있으면 적용하지 말고 알려 주십시오.</p>
+    <div class="rowflex"><button class="btn" id="ro-prev">미리보기</button>
+      <button class="btn dgr" id="ro-apply" style="display:none">적용</button>
+      <span class="hint" id="ro-info"></span></div>
+    <div id="ro-list" style="margin-top:10px"></div>
+    </div>
+  </div>
+
+  <div class="card">
     <div class="card-h">공유용 파일 만들기</div>
     <div class="card-b">
     <p class="hint" style="margin-bottom:10px">지금 화면에 올라와 있는 표본·지점·보관함 자료를 <b>단일 HTML 한 개</b>로 굽습니다.
@@ -831,10 +859,14 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 /* 학명 조판 — 괄호만 정체로 */
-const sciFmt=s=>esc(s).replace(/([()])/g,'<span class="rm">$1</span>');
+/* 학명 조판 — 괄호와 한정어(sp. cf. var. …)는 이탤릭이 아니다. 종소명·속명만 기울인다 */
+const SCIRM=/\b(spp?\.|cf\.|aff\.|nr\.|var\.|subvar\.|subsp\.|ssp\.|f\.|forma|indet\.|sensu|s\.\s?l\.|s\.\s?str\.|nov\.|gen\.|sect\.|group|complex)(?![A-Za-z])/g;
+const sciFmt=s=>esc(s)
+  .replace(/([()])/g,'<span class="rm">$1</span>')
+  .replace(SCIRM,'<span class="rm">$1</span>');
 
 /* ─────── 상태 ─────── */
-const BUILD='2026-08-28 · v30';
+const BUILD='2026-09-05 · v31';
 const DB={spec:[],site:[],chk:[],cont:[]};
 const SHA={};
 let CFG={owner:'',repo:'',branch:'main',store:'local',token:'',
@@ -877,13 +909,38 @@ const normCont=c=>{
 const CHO=["g","kk","n","d","tt","r","m","b","pp","s","ss","","j","jj","ch","k","t","p","h"];
 const JUNG=["a","ae","ya","yae","eo","e","yeo","ye","o","wa","wae","oe","yo","u","wo","we","wi","yu","eu","ui","i"];
 const JONG=["","k","kk","k","n","n","n","t","l","l","l","l","l","l","l","l","m","p","p","s","ss","ng","j","ch","k","t","p","h"];
+/* 행정구역 접미사 — 앞에 붙임표를 넣는다 (Bonggap-ri, Sinpung-myeon, Gongju-si).
+   리·면·읍·동·가·로·길은 두 글자부터, 시·군·구·도는 세 글자부터 자른다
+   (완도·제주 같은 두 글자 지명이 잘못 잘리지 않게). */
+const SUF2={'리':'ri','면':'myeon','읍':'eup','동':'dong','가':'ga','로':'ro','길':'gil'};
+const SUF3={'시':'si','군':'gun','구':'gu','도':'do'};
+const romOne=w=>{
+  let o='';
+  for(const ch of w){const c=ch.charCodeAt(0)-0xAC00;
+    o += (c>=0&&c<11172) ? CHO[Math.floor(c/588)]+JUNG[Math.floor((c%588)/28)]+JONG[c%28] : ch;}
+  return o;
+};
+const cap=o=>o?o[0].toUpperCase()+o.slice(1):o;
+/* 광역 단위는 관용 표기로 (강원특별자치도 → Gangwon-do) */
+const WIDE={'서울특별시':'Seoul','인천광역시':'Incheon','부산광역시':'Busan','대구광역시':'Daegu',
+ '광주광역시':'Gwangju','대전광역시':'Daejeon','울산광역시':'Ulsan','세종특별자치시':'Sejong',
+ '경기도':'Gyeonggi-do','강원도':'Gangwon-do','강원특별자치도':'Gangwon-do',
+ '충청북도':'Chungcheongbuk-do','충청남도':'Chungcheongnam-do',
+ '전라북도':'Jeollabuk-do','전북특별자치도':'Jeollabuk-do','전라남도':'Jeollanam-do',
+ '경상북도':'Gyeongsangbuk-do','경상남도':'Gyeongsangnam-do',
+ '제주도':'Jeju-do','제주특별자치도':'Jeju-do'};
+function romWord(w){
+  if(WIDE[w])return WIDE[w];
+  /* "파주시조리읍"처럼 띄어쓰기가 빠진 것 — 갈라서, 작은 단위를 앞에 둔다(주소는 뒤집어 쓰므로) */
+  const m=/^(.{2,}?[시군구])(.{2,}[읍면동리])$/.exec(w);
+  if(m)return romWord(m[2])+' '+romWord(m[1]);
+  const last=w.slice(-1), stem=w.slice(0,-1);
+  if(SUF2[last]&&w.length>=2&&/[가-힣]$/.test(stem))return cap(romOne(stem))+'-'+SUF2[last];
+  if(SUF3[last]&&w.length>=3&&/[가-힣]$/.test(stem))return cap(romOne(stem))+'-'+SUF3[last];
+  return cap(romOne(w));
+}
 function romanize(s){
-  return String(s||'').trim().split(/\s+/).reverse().map(w=>{
-    let o='';
-    for(const ch of w){const c=ch.charCodeAt(0)-0xAC00;
-      o += (c>=0&&c<11172) ? CHO[Math.floor(c/588)]+JUNG[Math.floor((c%588)/28)]+JONG[c%28] : ch;}
-    return o ? o[0].toUpperCase()+o.slice(1) : o;
-  }).join(' ');
+  return String(s||'').trim().split(/\s+/).reverse().map(romWord).filter(Boolean).join(' ');
 }
 const RN=['','Ⅰ','Ⅱ','Ⅲ','Ⅳ','Ⅴ','Ⅵ','Ⅶ','Ⅷ','Ⅸ','Ⅹ','Ⅺ','Ⅻ'];
 const toRoman=iso=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(iso||'');
@@ -1703,6 +1760,9 @@ function saveRec(){
     }
   }
   const rec={
+    /* 옛 기록을 먼저 깔고 그 위에 화면 값을 덮는다 — 이 화면이 모르는 필드
+       (다른 버전이 넣었거나 손으로 적어둔 것)를 편집 한 번에 잃지 않기 위함 */
+    ...(old||{}),
     no, legacy_no:(old&&old.legacy_no)||null,
     parent_no:(old&&old.parent_no)||null,
     site_id:resolveSite(), date:toRoman($('#e-date').value), date2:toRoman($('#e-date2').value)||null,
@@ -1729,7 +1789,7 @@ function saveRec(){
   const i=DB.spec.findIndex(s=>s.no===editing);
   if(i>=0)DB.spec[i]=rec; else DB.spec.push(rec);
   DB.spec.sort((a,b)=>numOf(a.no)-numOf(b.no));
-  editing=rec.no; mark(true); refreshFilters(); renderList(); counts(); fillContList();
+  editing=rec.no; mark(true); bkSoon('표본 저장'); refreshFilters(); renderList(); counts(); fillContList();
   siteOptions(rec.site_id);
   go('entry',rec.no,true);
   $('#e-title').textContent=`표본 ${rec.no}`; $('#e-del').style.display=$('#e-del2').style.display='';
@@ -2570,7 +2630,13 @@ function fqNorm(v){
 }
 $('#fq').addEventListener('input',()=>{clearTimeout(fqT);fqT=setTimeout(fqSearch,130);});
 $('#fq').addEventListener('keydown',e=>{
-  if(e.key==='Enter'){const first=$('#fq-list .ac-item[data-no]');if(first)first.click();}
+  if(e.key==='Enter'){
+    /* 속·종 요약 제안이 있으면 그것을 먼저 — 속명을 치고 엔터했는데 표본 한 건으로
+       튀던 문제(사용자 지적) */
+    const first=$('#fq-list .ac-item[data-gx]')||$('#fq-list .ac-item[data-tx]')
+      ||$('#fq-list .ac-item[data-no]');
+    if(first)first.click();
+  }
   else if(e.key==='Escape')$('#fq-list').classList.remove('on');
 });
 function fqPick(no){
@@ -2926,6 +2992,80 @@ async function idbPut(rows){try{const d=await idb();
 async function idbGet(){try{const d=await idb();
   return await new Promise(ok=>{const q=d.transaction('kv').objectStore('kv').get('checklist');
     q.onsuccess=()=>ok(q.result||null); q.onerror=()=>ok(null);});}catch(e){return null;}}
+/* ═══════════ 자동 백업 — 자료가 갈아끼워지는 모든 길목에서 스냅샷을 남긴다 ═══════════
+   불러오기 직전·직후, 덮어쓰기 직전, 커밋 직후, 표본 저장 직후.
+   IndexedDB에 최근 40개를 돌려 쓰며, 브라우저를 지우지 않는 한 남는다. */
+const BKMAX=40;
+async function bkAll(){try{const d=await idb();
+  return await new Promise(ok=>{const q=d.transaction('kv').objectStore('kv').get('backups');
+    q.onsuccess=()=>ok(Array.isArray(q.result)?q.result:[]); q.onerror=()=>ok([]);});
+  }catch(e){return [];}}
+async function bkPut(why){
+  try{
+    if(!DB.spec.length&&!DB.site.length)return;
+    const cur=await bkAll();
+    const snap={at:Date.now(),why,n:DB.spec.length,
+      spec:JSON.parse(JSON.stringify(DB.spec)),
+      site:JSON.parse(JSON.stringify(DB.site)),
+      cont:JSON.parse(JSON.stringify(DB.cont))};
+    const last=cur[0];
+    if(last&&last.n===snap.n&&JSON.stringify(last.spec)===JSON.stringify(snap.spec)
+      &&JSON.stringify(last.site)===JSON.stringify(snap.site)
+      &&JSON.stringify(last.cont)===JSON.stringify(snap.cont))return;   /* 같은 내용은 안 쌓는다 */
+    const next=[snap,...cur].slice(0,BKMAX);
+    const d=await idb();
+    await new Promise((ok,no)=>{const t=d.transaction('kv','readwrite');
+      t.objectStore('kv').put(next,'backups'); t.oncomplete=ok; t.onerror=()=>no(t.error);});
+  }catch(e){}
+}
+let bkTimer=null;
+const bkSoon=why=>{clearTimeout(bkTimer);bkTimer=setTimeout(()=>bkPut(why),1200);};
+async function bkList(){
+  const n=$('#bk-list'); if(!n)return;
+  const all=await bkAll();
+  if(!all.length){n.innerHTML='<span class="hint">아직 백업이 없습니다 — 자료를 불러오거나 표본을 저장하면 쌓입니다.</span>';return;}
+  n.innerHTML=`<div class="tbl-wrap" style="border:0;max-height:280px"><table>
+    <thead><tr><th style="width:150px">시각</th><th>계기</th><th class="c">표본</th><th class="c" style="width:170px"></th></tr></thead>
+    <tbody>${all.map((b,i)=>`<tr>
+      <td class="mono">${new Date(b.at).toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}</td>
+      <td>${esc(b.why||'')}</td><td class="c mono">${b.n}</td>
+      <td class="c"><button class="btn sm" data-bkr="${i}">되돌리기</button>
+        <button class="btn sm" data-bkd="${i}">파일로</button></td></tr>`).join('')}</tbody></table></div>`;
+  $$('#bk-list [data-bkd]').forEach(b=>b.onclick=async()=>{
+    const s=(await bkAll())[+b.dataset.bkd]; if(!s)return;
+    const t=new Date(s.at).toISOString().slice(0,16).replace(/[:T]/g,'');
+    download(`specimens-${t}.jsonl`,toJL(s.spec));
+    download(`sites-${t}.jsonl`,toJL(s.site));
+    if(s.cont&&s.cont.length)download(`containers-${t}.jsonl`,toJL(s.cont));
+    say('백업을 파일로 내려받았습니다.');
+  });
+  $$('#bk-list [data-bkr]').forEach(b=>b.onclick=async()=>{
+    const s=(await bkAll())[+b.dataset.bkr]; if(!s)return;
+    const bn=say(`${new Date(s.at).toLocaleString('ko-KR')} 시점(표본 ${s.n}건)으로 되돌립니다. 지금 화면(${DB.spec.length}건)은 되돌리기 직전 백업으로 남습니다.`,'warn');
+    const y=document.createElement('button'); y.className='btn sm pri'; y.textContent='되돌리기';
+    y.onclick=async()=>{
+      await bkPut('되돌리기 직전');
+      DB.spec=s.spec.map(normSpec); DB.site=s.site||[]; DB.cont=(s.cont||[]).map(normCont);
+      afterLoad(); mark(true); bkList(); bn.classList.remove('on');
+      say('되돌렸습니다 — 확인한 뒤 동기화 버튼으로 GitHub에 반영하십시오.','warn');
+    };
+    $('#bacts').append(y);
+  });
+}
+
+/* 커밋 검증 — GitHub이 돌려준 blob sha 를 우리가 보낸 바이트로 직접 계산해 맞춰본다 */
+async function blobSha(text){
+  try{
+    if(!(self.crypto&&crypto.subtle))return null;
+    const body=new TextEncoder().encode(text);
+    const head=new TextEncoder().encode(`blob ${body.length}\0`);
+    const buf=new Uint8Array(head.length+body.length);
+    buf.set(head,0); buf.set(body,head.length);
+    const h=await crypto.subtle.digest('SHA-1',buf);
+    return [...new Uint8Array(h)].map(b=>b.toString(16).padStart(2,'0')).join('');
+  }catch(e){return null;}
+}
+
 async function cacheInfo(){const c=await idbGet();
   $('#cacheinfo').textContent=c?`캐시됨 — ${c.rows.length.toLocaleString()}건 · ${new Date(c.at).toISOString().slice(0,10)}`:'캐시 없음';}
 $('#chk-clear').onclick=async()=>{try{const d=await idb();
@@ -2965,7 +3105,7 @@ async function ghWrite(path,text,sha,msg,force){
   if(!r.ok)throw new Error(`${path}: HTTP ${r.status} ${(await r.text()).slice(0,160)}`);
   return (await r.json()).content.sha;
 }
-$('#c-pull').onclick=async()=>{
+const doPull=async()=>{
   readCfg();
   const miss=[];
   if(!CFG.owner)miss.push('사용자');
@@ -3003,6 +3143,8 @@ $('#c-pull').onclick=async()=>{
       $('#bacts').append(y);
       return;
     }
+    /* 불러오기는 화면 자료를 통째로 갈아끼운다 — 갈아끼우기 전에 항상 백업을 남긴다 */
+    if(DB.spec.length)await bkPut(dirty?'불러오기 직전 (미동기화 변경 있었음)':'불러오기 직전');
     DB.spec=a.rows.map(normSpec).sort((x,y)=>numOf(x.no)-numOf(y.no)); SHA.spec=a.sha;
     DB.site=b.rows; SHA.site=b.sha;
     DB.cont=c.rows.map(normCont); SHA.cont=c.sha;
@@ -3014,11 +3156,15 @@ $('#c-pull').onclick=async()=>{
     stampSync();
     $('#c-info').textContent=`불러왔습니다 — 표본 ${DB.spec.length}건.`;
     say(`GitHub에서 불러왔습니다 — 표본 ${DB.spec.length}건.`);
+    await bkPut('불러온 직후'); bkList();
+    return true;
   }catch(e){$('#c-info').textContent='';
     say(/Failed to fetch|NetworkError|Load failed/i.test(e.message)
       ? '요청이 브라우저에서 막혔습니다 — 광고차단 확장이나 회사망 프록시일 수 있습니다. 연결 진단을 눌러 안내를 확인하십시오.'
-      : e.message,'bad');}
+      : e.message,'bad');
+    return false;}
 };
+$('#c-pull').onclick=()=>doPull();
 /* 기기 추가 링크 — 설정을 주소 조각(#setup=)에 담아 옮긴다. 서버로는 전송되지 않는 부분이다 */
 const b64u={
   enc:o=>btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(o))))
@@ -3153,12 +3299,25 @@ async function doSync(force){
     }catch(e){}
   }
   $('#status').textContent='커밋 중…';
+  if(force)await bkPut('덮어쓰기 직전');
   try{
     const msg=`표본 갱신 ${new Date().toISOString().slice(0,16).replace('T',' ')}`;
-    SHA.spec=await ghWrite(PATH.spec,toJL(DB.spec),SHA.spec,msg,force);
-    SHA.site=await ghWrite(PATH.site,toJL(DB.site),SHA.site,msg,force);
-    SHA.cont=await ghWrite(PATH.cont,toJL(DB.cont),SHA.cont,msg,force);
-    mark(false); draftClear(); stampSync(); say('커밋했습니다.');
+    const tSpec=toJL(DB.spec), tSite=toJL(DB.site), tCont=toJL(DB.cont);
+    const want=await blobSha(tSpec);
+    SHA.spec=await ghWrite(PATH.spec,tSpec,SHA.spec,msg,force);
+    SHA.site=await ghWrite(PATH.site,tSite,SHA.site,msg,force);
+    SHA.cont=await ghWrite(PATH.cont,tCont,SHA.cont,msg,force);
+    /* 올린 내용과 GitHub이 가진 내용이 정말 같은지 확인한다 — 다르면 초안을 지우지 않는다 */
+    if(want&&SHA.spec&&want!==SHA.spec){
+      $('#status').textContent='커밋 확인 실패'; $('#status').className='err';
+      say(`커밋은 됐지만 GitHub의 내용이 올린 것과 다릅니다 (${want.slice(0,7)} ≠ ${String(SHA.spec).slice(0,7)}). `
+        +'임시 초안을 지우지 않았습니다 — 설정의 자동 백업에서 확인하고 다시 시도하십시오.','bad');
+      await bkPut('커밋 확인 실패');
+      return;
+    }
+    await bkPut('커밋 직후'); bkList();
+    mark(false); draftClear(); stampSync();
+    say(want?`커밋했습니다 — 표본 ${DB.spec.length}건, 내용 일치 확인.`:`커밋했습니다 — 표본 ${DB.spec.length}건.`);
   }catch(e){
     $('#status').textContent='커밋 실패'; $('#status').className='err';
     if(e.conflict){
@@ -3218,6 +3377,34 @@ $('#c-save').onclick=saveCfg; $('#c-save2').onclick=saveCfg;
   $('#c-collen').value=CFG.collen;$('#c-prefix').value=CFG.prefix;
   $('#c-inst').value=CFG.inst||'';
 })();
+
+/* 백업 카드 버튼 */
+$('#bk-now').onclick=async()=>{await bkPut('직접 백업');await bkList();say('지금 상태를 백업했습니다.');};
+$('#bk-refresh').onclick=()=>bkList();
+
+/* 채집지점 영문 표기 다시 만들기 */
+let roPlan=[];
+$('#ro-prev').onclick=()=>{
+  roPlan=DB.site.map(st=>({st,now:String(st.locality_en||''),next:romanize(st.locality_ko||'')}))
+    .filter(x=>x.next&&x.next!==x.now);
+  const L=$('#ro-list');
+  if(!roPlan.length){L.innerHTML='<span class="hint">바뀔 것이 없습니다.</span>';
+    $('#ro-apply').style.display='none'; $('#ro-info').textContent=''; return;}
+  L.innerHTML=`<div class="tbl-wrap" style="border:0;max-height:300px"><table>
+    <thead><tr><th>한글 주소</th><th>지금</th><th>바뀔 표기</th></tr></thead>
+    <tbody>${roPlan.map(x=>`<tr><td>${esc(x.st.locality_ko||'')}</td>
+      <td class="hint">${esc(x.now)}</td><td><b>${esc(x.next)}</b></td></tr>`).join('')}</tbody></table></div>`;
+  $('#ro-apply').style.display=''; $('#ro-info').textContent=`${roPlan.length}곳이 바뀝니다.`;
+};
+$('#ro-apply').onclick=async()=>{
+  if(!roPlan.length)return;
+  await bkPut('영문 표기 일괄 변경 직전');
+  roPlan.forEach(x=>{x.st.locality_en=x.next;});
+  const n=roPlan.length; roPlan=[];
+  $('#ro-list').innerHTML=''; $('#ro-apply').style.display='none'; $('#ro-info').textContent='';
+  mark(true); afterLoad(); bkList();
+  say(`${n}곳의 영문 표기를 바꿨습니다 — 확인 후 동기화하십시오.`,'warn');
+};
 
 /* ═══════════ 공유용 스냅샷 ═══════════
    이 파일(index.html) 자체를 통째로 읽어, 자료를 담은 JSON 블록 하나를 body 끝에 붙여
@@ -3313,18 +3500,26 @@ function snapLoad(){
   if(snap){ afterLoad(); go('list',null,true); return; }   /* 스냅샷 — 여기서 끝 */
   const setup=consumeSetup();
   fromHash();
-  if(CFG.owner&&CFG.repo&&CFG.token){$('#c-pull').click();}
-  else{afterLoad();}
+  /* 반드시 기다린다 — 예전에는 기다리지 않아 불러오기가 늦게 끝나면서
+     사용자가 복원해 둔 초안을 조용히 덮어쓸 수 있었다 */
+  if(CFG.owner&&CFG.repo&&CFG.token)await doPull();
+  else afterLoad();
+  bkList();
   if(setup)return;   /* 새 기기 첫 연결 — 초안 복원 물어볼 것 없음 */
   /* 저장(커밋) 없이 닫혔던 변경분이 있으면 복원 제안 */
   try{
     const d=JSON.parse(localStorage.getItem('ildraft')||'null');
     if(d&&d.spec&&d.spec.length){
       const t=new Date(d.at).toISOString().slice(0,16).replace('T',' ');
-      const bn=say(`동기화(커밋)하지 않은 변경분이 있습니다 — 표본 ${d.spec.length}건, ${t}. 복원할까요?`,'warn');
+      /* 방금 불러온 것과 무엇이 다른지 짚어 준다 */
+      const cur=new Map(DB.spec.map(x=>[x.no,JSON.stringify(x)]));
+      const diff=d.spec.filter(x=>cur.get(x.no)!==JSON.stringify(normSpec(x)));
+      const dtxt=diff.length?` GitHub과 다른 표본 ${diff.length}건: ${diff.slice(0,6).map(x=>x.no).join(', ')}${diff.length>6?' 외':''}.`:'';
+      const bn=say(`동기화(커밋)하지 않은 변경분이 있습니다 — 표본 ${d.spec.length}건, ${t}.${dtxt} 복원할까요?`,'warn');
       const y=document.createElement('button'); y.className='btn sm pri'; y.textContent='복원';
-      y.onclick=()=>{DB.spec=d.spec.map(normSpec); DB.site=d.site||[]; DB.cont=(d.cont||[]).map(normCont);
-        afterLoad(); mark(true); bn.classList.remove('on');
+      y.onclick=async()=>{await bkPut('초안 복원 직전');
+        DB.spec=d.spec.map(normSpec); DB.site=d.site||[]; DB.cont=(d.cont||[]).map(normCont);
+        afterLoad(); mark(true); bkList(); bn.classList.remove('on');
         say('복원했습니다 — 확인 후 동기화 버튼으로 커밋하십시오.','warn');};
       const nx=document.createElement('button'); nx.className='btn sm dgr'; nx.textContent='버리기';
       nx.onclick=()=>{draftClear(); bn.classList.remove('on');};
