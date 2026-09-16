@@ -251,8 +251,12 @@ input.cell:focus{background:var(--canvas)}
 .mini .bc{font-size:8.5px}
 
 /* ── 라벨 (인쇄 기하 — 검증 완료, 임의 수정 금지) ── */
-#sheet{background:#fff;color:#000;padding:10mm;border:1px solid var(--border);border-radius:6px;
-  margin:0 auto;width:210mm;zoom:var(--pv,1)}
+#sheet{margin:0 auto;width:210mm;zoom:var(--pv,1)}
+/* A4 한 장 = .page 하나. 화면에서도 장 단위로 끊어 보여 인쇄와 눈으로 맞춘다 */
+.page{background:#fff;color:#000;width:210mm;height:297mm;padding:10mm;
+  border:1px solid var(--border);border-radius:6px;margin:0 auto 14px;
+  box-shadow:0 1px 4px rgba(31,35,40,.10);overflow:hidden;box-sizing:border-box}
+.pageno{font-size:11px;color:var(--mut);text-align:center;margin:0 0 4px}
 /* 배율을 올려도 페이지 전체가 커지지 않도록 바깥 틀은 고정하고 안에서 스크롤한다 */
 #sheetwrap{overflow:auto;margin-top:8px;height:70vh;min-height:380px;resize:vertical;
   background:var(--subtle);border:1px solid var(--border);border-radius:6px;padding:10px}
@@ -314,6 +318,11 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
   /* 패딩이 빠지면 내부 폭이 210mm가 되어 한 줄 10세트 — 10번째가 여백에 잘린다.
      인쇄 가능 폭(210 − 여백 10×2)으로 고정해 화면과 같은 9세트 줄바꿈을 강제한다 */
   #sheet{width:190mm}
+  /* 인쇄 — 한 장씩 끊는다. @page 여백 10mm 를 이미 쓰므로 .page 는 안쪽 크기로 */
+  .page{width:190mm;height:277mm;padding:0;margin:0;border:0;border-radius:0;box-shadow:none;
+    page-break-after:always;break-after:page}
+  .page:last-child{page-break-after:auto;break-after:auto}
+  .pageno{display:none}
   .ruler{page-break-after:always}
   .pb{page-break-before:always}
 }
@@ -661,6 +670,7 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
       <label class="rowflex" style="gap:5px;align-items:flex-end;height:46px"><input type="checkbox" id="p-guide" checked style="width:auto">재단 안내선</label>
       <label class="rowflex" style="gap:5px;align-items:flex-end;height:46px"><input type="checkbox" id="p-ruler" style="width:auto">눈금자 페이지</label>
       <div class="grow"></div>
+      <span class="hint" id="p-pages" style="font-weight:600;color:var(--fg)"></span>
       <span class="hint" id="p-k"></span>
       <button class="btn pri" id="p-go">인쇄</button>
     </div>
@@ -866,7 +876,7 @@ const sciFmt=s=>esc(s)
   .replace(SCIRM,'<span class="rm">$1</span>');
 
 /* ─────── 상태 ─────── */
-const BUILD='2026-09-16 · v33';
+const BUILD='2026-09-16 · v34';
 const DB={spec:[],site:[],chk:[],cont:[]};
 const SHA={};
 let CFG={owner:'',repo:'',branch:'main',store:'local',token:'',
@@ -2366,14 +2376,32 @@ function labelSet(s){
       :`<div class="fit f36" style="height:19.05mm">Det. ${esc(s.det_by_en||'')}</div>`}
   </div></div></div>`;
 }
+/* A4 한 장에 몇 세트가 들어가는지 — 보정계수 k 를 반영해 계산한다.
+   인쇄 가능 영역 190 × 277mm, 한 세트 20.002 × 22.860mm */
+function perPage(){
+  const k=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--k'))||1;
+  const cols=Math.max(1,Math.floor(190/(20.002*k)));
+  const rows=Math.max(1,Math.floor(277/(22.860*k)));
+  return {cols,rows,n:cols*rows};
+}
 function renderSheet(){
   const list=[];
   for(const q of queue){const s=specOf(q.no);if(!s)continue;
     for(let i=0;i<q.copies;i++)list.push(s);}
   const g=$('#p-guide').checked?' guides':'';
-  $('#sheetin').innerHTML=list.length
-    ? `<div class="lgrid${g}">${list.map(labelSet).join('')}</div>`
-    : '<p class="hint" style="color:#888">대기열이 비어 있습니다.</p>';
+  if(!list.length){
+    $('#sheetin').innerHTML='<p class="hint" style="color:#888;padding:20px">대기열이 비어 있습니다.</p>';
+    $('#p-pages').textContent=''; autofit(); fitPreview(); return;
+  }
+  const pp=perPage(), pages=Math.ceil(list.length/pp.n);
+  let h='';
+  for(let i=0;i<pages;i++){
+    const part=list.slice(i*pp.n,(i+1)*pp.n);
+    h+=`<div class="pageno noprint">${i+1} / ${pages} 쪽</div>`
+      +`<div class="page"><div class="lgrid${g}">${part.map(labelSet).join('')}</div></div>`;
+  }
+  $('#sheetin').innerHTML=h;
+  $('#p-pages').textContent=`라벨 ${list.length}세트 · A4 ${pages}장 (한 장에 ${pp.cols}×${pp.rows}=${pp.n}세트)`;
   autofit(); fitPreview();
 }
 function autofit(){
