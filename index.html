@@ -866,7 +866,7 @@ const sciFmt=s=>esc(s)
   .replace(SCIRM,'<span class="rm">$1</span>');
 
 /* ─────── 상태 ─────── */
-const BUILD='2026-09-16 · v32';
+const BUILD='2026-09-16 · v33';
 const DB={spec:[],site:[],chk:[],cont:[]};
 const SHA={};
 let CFG={owner:'',repo:'',branch:'main',store:'local',token:'',
@@ -3180,7 +3180,7 @@ const doPull=async()=>{
     stampSync();
     $('#c-info').textContent=`불러왔습니다 — 표본 ${DB.spec.length}건.`;
     say(`GitHub에서 불러왔습니다 — 표본 ${DB.spec.length}건.`);
-    await bkPut('불러온 직후'); bkList();
+    await bkPut('불러온 직후'); bkList(); setTimeout(roCheck,600);
     return true;
   }catch(e){$('#c-info').textContent='';
     say(/Failed to fetch|NetworkError|Load failed/i.test(e.message)
@@ -3408,6 +3408,34 @@ $('#bk-refresh').onclick=()=>bkList();
 
 /* 채집지점 영문 표기 다시 만들기 */
 let roPlan=[];
+/* 저장된 표기가 새 규칙과 다르면 자료를 불러온 뒤 한 번 짚어 준다.
+   (라벨은 저장된 locality_en 을 찍으므로, 규칙만 고쳐서는 라벨이 안 바뀐다) */
+const roStale=()=>DB.site.filter(st=>{
+  const n=romanize(st.locality_ko||''); return n&&n!==String(st.locality_en||'');});
+let roAsked=false;
+function roCheck(){
+  if(roAsked||snapMode)return;
+  const bad=roStale(); if(!bad.length)return;
+  try{if(localStorage.getItem('ilroskip')==='1')return;}catch(e){}
+  roAsked=true;
+  const ex=bad[0];
+  const bn=say(`채집지점 영문 표기 ${bad.length}곳이 붙임표 규칙과 다릅니다 — `
+    +`예: ${esc(String(ex.locality_en||'').split(' ').slice(0,2).join(' '))}… → `
+    +`${esc(romanize(ex.locality_ko||'').split(' ').slice(0,2).join(' '))}… 라벨에도 그대로 찍힙니다.`,'warn');
+  const y=document.createElement('button'); y.className='btn sm pri'; y.textContent=`${bad.length}곳 고치기`;
+  y.onclick=async()=>{
+    await bkPut('영문 표기 일괄 변경 직전');
+    bad.forEach(st=>{st.locality_en=romanize(st.locality_ko||'');});
+    mark(true); afterLoad(); bkList(); bn.classList.remove('on');
+    say(`${bad.length}곳을 고쳤습니다 — 라벨을 다시 뽑기 전에 동기화를 눌러 주십시오.`,'warn');
+  };
+  const v=document.createElement('button'); v.className='btn sm'; v.textContent='먼저 보기';
+  v.onclick=()=>{bn.classList.remove('on');go('conf');$('#ro-prev').click();
+    setTimeout(()=>$('#ro-list').scrollIntoView({block:'center'}),100);};
+  const n=document.createElement('button'); n.className='btn sm'; n.textContent='그대로 두기';
+  n.onclick=()=>{try{localStorage.setItem('ilroskip','1');}catch(e){}bn.classList.remove('on');};
+  $('#bacts').append(y,v,n);
+}
 $('#ro-prev').onclick=()=>{
   roPlan=DB.site.map(st=>({st,now:String(st.locality_en||''),next:romanize(st.locality_ko||'')}))
     .filter(x=>x.next&&x.next!==x.now);
@@ -3484,6 +3512,7 @@ $('#c-snap').onclick=async()=>{
   btn.disabled=false;
 };
 /* 받은 쪽 — 읽기 전용으로 잠근다 */
+let snapMode=false;
 function snapLoad(){
   const el=document.getElementById(SNAPTAG);
   if(!el)return null;
@@ -3501,6 +3530,7 @@ function snapLoad(){
   ['#save','#sel-del'].forEach(q=>{const n=$(q); if(n)n.style.display='none';});
   $('#status').textContent='스냅샷';
   document.title='곤충 표본 — 읽기 전용 스냅샷';
+  snapMode=true;
   return d;
 }
 
@@ -3529,6 +3559,7 @@ function snapLoad(){
   if(CFG.owner&&CFG.repo&&CFG.token)await doPull();
   else afterLoad();
   bkList();
+  if(!CFG.token)setTimeout(roCheck,600);     /* 파일로만 쓰는 경우 */
   if(setup)return;   /* 새 기기 첫 연결 — 초안 복원 물어볼 것 없음 */
   /* 저장(커밋) 없이 닫혔던 변경분이 있으면 복원 제안 */
   try{
