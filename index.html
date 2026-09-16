@@ -866,7 +866,7 @@ const sciFmt=s=>esc(s)
   .replace(SCIRM,'<span class="rm">$1</span>');
 
 /* ─────── 상태 ─────── */
-const BUILD='2026-09-05 · v31';
+const BUILD='2026-09-16 · v32';
 const DB={spec:[],site:[],chk:[],cont:[]};
 const SHA={};
 let CFG={owner:'',repo:'',branch:'main',store:'local',token:'',
@@ -887,7 +887,31 @@ function b64enc(str){const b=new TextEncoder().encode(str);let s='';const C=0x80
 function b64dec(x){if(!x)return'';const bin=atob(String(x).replace(/\s/g,''));const b=new Uint8Array(bin.length);
   for(let i=0;i<bin.length;i++)b[i]=bin.charCodeAt(i);return new TextDecoder().decode(b);}
 const parseJL=t=>t.split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{try{return JSON.parse(l)}catch(e){return null}}).filter(Boolean);
-const toJL=a=>a.map(o=>JSON.stringify(o,Object.keys(o).sort())).join('\n')+'\n';
+/* ★ 키를 정렬해 git diff 를 깔끔하게 하되, 중첩 객체를 잃지 않는다.
+   예전 코드는 JSON.stringify(o, Object.keys(o).sort()) 였는데, 배열 replacer 는
+   최상위뿐 아니라 **모든 깊이**에 키 필터로 걸린다. 그래서 exp {dissect,dna,photo,note…}
+   가 통째로 {} 로, log 항목이 {date} 만 남고 잘려 나갔다. 절대 되돌리지 말 것. */
+function sortKeys(v){
+  if(Array.isArray(v))return v.map(sortKeys);
+  if(v&&typeof v==='object'&&!(v instanceof Date)){
+    const r={}; Object.keys(v).sort().forEach(k=>{r[k]=sortKeys(v[k]);}); return r;
+  }
+  return v;
+}
+const toJL=a=>a.map(o=>JSON.stringify(sortKeys(o))).join('\n')+'\n';
+/* 파일로 나가기 전, 써서 다시 읽었을 때 똑같은지 확인한다 —
+   직렬화가 무언가를 흘리면 여기서 걸려 커밋 자체를 막는다 */
+function toJLSafe(arr,label){
+  const text=toJL(arr);
+  const back=parseJL(text);
+  if(back.length!==arr.length)
+    throw new Error(`${label}: ${arr.length}건을 썼는데 ${back.length}건만 다시 읽힙니다 — 커밋을 중단했습니다.`);
+  for(let i=0;i<arr.length;i++){
+    const A=JSON.stringify(sortKeys(arr[i])), B=JSON.stringify(sortKeys(back[i]));
+    if(A!==B)throw new Error(`${label} ${arr[i].no||i+1}번째 기록이 파일로 옮기는 중 달라졌습니다 — 커밋을 중단했습니다.`);
+  }
+  return text;
+}
 
 /* 정규화 — 구버전 파일 호환. '생식기 슬라이드' 보존형태는 건조+해부체크로 흡수 */
 function normSpec(s){
@@ -3269,8 +3293,8 @@ $('#c-test').onclick=async()=>{
 
 $('#save').onclick=async()=>{
   if(!CFG.token||!CFG.owner||!CFG.repo){
-    download('specimens.jsonl',toJL(DB.spec)); download('sites.jsonl',toJL(DB.site));
-    if(DB.cont.length)download('containers.jsonl',toJL(DB.cont));
+    download('specimens.jsonl',toJLSafe(DB.spec,'표본')); download('sites.jsonl',toJLSafe(DB.site,'채집지점'));
+    if(DB.cont.length)download('containers.jsonl',toJLSafe(DB.cont,'보관함'));
     mark(false); draftClear();
     return say('GitHub 설정이 없어 파일로 내려받았습니다. 다음에 열 때 이 파일들을 다시 불러오십시오.','warn');
   }
@@ -3302,7 +3326,7 @@ async function doSync(force){
   if(force)await bkPut('덮어쓰기 직전');
   try{
     const msg=`표본 갱신 ${new Date().toISOString().slice(0,16).replace('T',' ')}`;
-    const tSpec=toJL(DB.spec), tSite=toJL(DB.site), tCont=toJL(DB.cont);
+    const tSpec=toJLSafe(DB.spec,'표본'), tSite=toJLSafe(DB.site,'채집지점'), tCont=toJLSafe(DB.cont,'보관함');
     const want=await blobSha(tSpec);
     SHA.spec=await ghWrite(PATH.spec,tSpec,SHA.spec,msg,force);
     SHA.site=await ghWrite(PATH.site,tSite,SHA.site,msg,force);
