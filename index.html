@@ -163,6 +163,8 @@ input.cell:focus{background:var(--canvas)}
 .tag.w{background:var(--warn-l);color:var(--warn);border-color:transparent}
 .tag.r{background:var(--bad-l);color:var(--bad);border-color:transparent}
 .tag.p{background:#fbefff;color:#8250df;border-color:transparent}
+.tag.k{background:#424a53;color:#fff;border-color:transparent}
+.tag.gs{background:transparent;border:1px dashed var(--ok);color:var(--ok)}   /* DNA 예비 — 실패하면 쓸 개체 */     /* 이관·소모 — 더 이상 소장하지 않음 */
 
 /* 지도 */
 #map{height:540px;position:relative;z-index:0;background:var(--subtle)}
@@ -406,10 +408,12 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
         <option value="fixed">확정만</option></select>
       <select id="f-exp" style="width:auto">
         <option value="">실험 전체</option><option value="dissect">해부한 것</option>
-        <option value="dna">DNA 추출한 것</option><option value="photo">촬영한 것</option>
+        <option value="dna">DNA 추출한 것</option><option value="dna_spare">DNA 예비</option><option value="photo">촬영한 것</option>
         <option value="none">실험 안 한 것</option></select>
       <label class="rowflex" style="gap:5px;font-size:12.5px" title="아직 안 뽑은 것 + 뽑은 뒤 라벨 내용이 바뀐 것"><input type="checkbox" id="f-unp" style="width:auto">출력할 것만</label>
-      <label class="rowflex" style="gap:5px;font-size:12.5px"><input type="checkbox" id="f-loan" style="width:auto">대여중만</label>
+      <select id="f-disp" style="width:auto" title="소장 상태 — 기록의 대여·반납·이관·소모·분실로 정해집니다">
+        <option value="">소장 상태 전체</option><option value="in">소장 중</option><option value="loan">대여중</option>
+        <option value="gone">이관 · 소모 · 분실</option></select>
     </div>
   </div></div>
   <div class="rowflex" style="margin-bottom:8px">
@@ -420,6 +424,7 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
     <button class="btn sm" id="chk-btn" style="display:none" title="번호·계보·DNA 표시·보관 칸·지점 표기가 서로 맞는지 봅니다">기록 점검</button>
     <button class="btn sm" id="dl-xls">Excel 내려받기</button>
     <button class="btn sm" id="sel-to-q">선택한 것을 출력 대기열로</button>
+    <button class="btn sm" id="sel-ho" title="고른 표본을 다른 연구자에게 보내거나(대여·이관) 돌려받은 것을 한 번에 기록">선택한 것 내보내기 · 돌려받기</button>
     <button class="btn sm dgr" id="sel-del">선택 삭제</button>
     <span class="hint" id="selinfo"></span>
   </div>
@@ -589,6 +594,7 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
       <div class="rowflex" style="margin-top:12px">
         <label class="rowflex" style="gap:5px"><input type="checkbox" id="sp-dissect" style="width:auto">해부 · 생식기 슬라이드</label>
         <label class="rowflex" style="gap:5px"><input type="checkbox" id="sp-dna" style="width:auto">DNA 추출용</label>
+        <label class="rowflex" style="gap:5px" title="본 시료가 실패하면 쓸 개체 — 아직 추출하지 않음"><input type="checkbox" id="sp-dnasp" style="width:auto">DNA 예비</label>
         <div class="grow"></div>
         <button class="btn pri" id="sp-go">분리</button><button class="btn" id="sp-cancel">취소</button>
       </div>
@@ -605,6 +611,9 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
         <input type="checkbox" id="x-photo" style="width:auto"><span>사진 촬영</span></label>
       <div><input type="text" id="x-note" placeholder="실험 비고 (슬라이드 매수, 프라이머 등)"></div>
     </div>
+    <label class="rowflex" style="gap:7px;margin-top:8px;font-size:13px;flex-wrap:nowrap;align-items:flex-start;cursor:pointer">
+      <input type="checkbox" id="x-dnasp" style="width:auto;flex:none;margin-top:3px">
+      <span><b>DNA 예비</b> — 본 시료의 추출이 실패하면 대신 쓸 개체(아직 추출 안 함). 실제로 쓰게 되면 <b>DNA 추출</b>로 바꾸십시오.</span></label>
     <!-- 해부 체크 시 — 생식기를 어디에 두는지. 별도 tube·슬라이드함이면 박스를 적는다 -->
     <div class="grid g4" id="genwrap" style="margin-top:10px;display:none">
       <div><label class="fl">생식기 보관</label><select id="x-gen">
@@ -642,18 +651,21 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
         <option>18S</option><option>28S</option><option>H3</option><option>wingless</option><option>CAD</option><option>ITS2</option></datalist>
     </div>
 
-    <h3><span class="stepn">5</span>기록 <span class="subtiny">대여 · 반납 · 메모</span></h3>
+    <h3><span class="stepn">5</span>기록 <span class="subtiny">대여 · 반납 · 이관 · 소모 · 메모</span></h3>
     <div class="tbl-wrap"><table>
       <thead><tr><th class="c" style="width:110px">날짜</th><th class="c" style="width:80px">구분</th><th>내용</th><th class="c" style="width:44px"></th></tr></thead>
       <tbody id="logtb"></tbody></table></div>
     <div class="rowflex" style="margin-top:9px">
       <input type="date" id="lg-date" style="width:150px">
       <select id="lg-type" style="width:110px">
-        <option value="loan">대여</option><option value="return">반납</option><option value="memo">메모</option></select>
+        <option value="loan">대여</option><option value="return">반납</option><option value="memo">메모</option>
+        <option value="gift">이관</option><option value="used">소모</option><option value="lost">분실</option></select>
       <div class="grow"><input type="text" id="lg-text" placeholder="예: 홍길동(A대) — 모식 비교용 / 반납 예정 2027-03"></div>
       <button class="btn" id="lg-add">추가</button>
     </div>
-    <p class="hint" style="margin-top:7px">대여를 추가하면 목록에 <span class="tag r">대여중</span> 표시가 붙고, 반납을 추가하면 사라집니다.</p>
+    <p class="hint" style="margin-top:7px">대여 → <span class="tag r">대여중</span>, 반납 → 다시 소장, 이관(돌려받지 않음) · 소모(분석에 다 씀) → <span class="tag k">이관</span> <span class="tag k">소모</span>, 분실 → <span class="tag r">분실</span>.
+      마지막 상태 기록이 지금 상태입니다. 표본 기록은 지우지 마십시오 — 소모된 번호도 서열의 증거표본 번호로 남습니다.
+      박스째 넘길 때는 보관함 화면의 <b>이 박스 내보내기 · 돌려받기</b>가 한 번에 기록합니다.</p>
 
     <!-- 긴 입력 화면 맨 밑에서도 저장할 수 있게 — 위 버튼과 같은 동작 -->
     <div class="rowflex" style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border-2);justify-content:flex-end">
@@ -962,7 +974,7 @@ const sciFmt=s=>esc(s)
   .replace(SCIRM,'<span class="rm">$1</span>');
 
 /* ─────── 상태 ─────── */
-const BUILD='2026-10-09 · v35';
+const BUILD='2026-10-09 · v37';
 const DB={spec:[],site:[],chk:[],cont:[]};
 const SHA={};
 let CFG={owner:'',repo:'',branch:'main',store:'local',token:'',
@@ -973,8 +985,8 @@ const PATH={spec:'data/specimens.jsonl',site:'data/sites.jsonl',cont:'data/conta
 const PRES={wet:'액침',dry:'건조'};
 const SEX={M:'♂',F:'♀','':''};
 const CTYPE={grid:'격자 9×9',free:'상자형'};
-const LTYPE={loan:'대여',return:'반납',memo:'메모',split:'분리',conv:'전환'};
-const SYSLOG=new Set(['split','conv']);      /* 앱이 남기는 이력 — 목록의 '기록 n' 에는 세지 않는다 */
+const LTYPE={loan:'대여',return:'반납',memo:'메모',gift:'이관',used:'소모',lost:'분실',split:'분리',conv:'전환',sync:'모체 맞춤'};
+const SYSLOG=new Set(['split','conv','sync']);      /* 앱이 남기는 이력 — 목록의 '기록 n' 에는 세지 않는다 */
 const STATUS={new:'신종 후보',unrec:'미기록 후보',undet:'미동정'};
 const STATUSMARK={new:'n. sp.?',unrec:'new rec.?',undet:''};   /* 미동정은 라벨에 마커 없음 */
 
@@ -1082,13 +1094,22 @@ const jong=w=>{const ch=String(w||'').trim().slice(-1);
   const c=ch.charCodeAt(0)-0xAC00;return c>=0&&c<11172?c%28:-1;};
 const jUn=w=>w+(jong(w)>0?'은':'는'), jRo=w=>w+(jong(w)>0&&jong(w)!==8?'으로':'로'), jUl=w=>w+(jong(w)>0?'을':'를');
 
-function loanOpen(s){
-  let open=null;
-  for(const e of [...(s.log||[])].sort((a,b)=>String(a.date).localeCompare(String(b.date)))){
-    if(e.type==='loan')open=e; else if(e.type==='return')open=null;
+/* ─── 소장 상태 — 기록(log)의 마지막 '상태 사건'으로 정한다 ───
+   대여 → 대여중 · 반납 → 소장 · 이관 → 상대가 보관 · 소모 → 분석에 다 씀 · 분실.
+   표본 기록은 지우지 않는다 — 소모된 번호도 그 서열의 증거표본 번호로 남고, 번호가 다시 쓰이지도 않는다. */
+const DISP={loan:{t:'대여중',c:'r'},gift:{t:'이관',c:'k'},used:{t:'소모',c:'k'},lost:{t:'분실',c:'r'}};
+const DISPEV=new Set(['loan','return','gift','used','lost']);
+function dispOf(s){
+  let k='', ev=null;
+  for(const e of [...((s&&s.log)||[])].sort((a,b)=>String(a.date).localeCompare(String(b.date)))){
+    if(!DISPEV.has(e.type))continue;
+    k=e.type==='return'?'':e.type; ev=e;
   }
-  return open;
+  return {k, ev:k?ev:null};
 }
+function loanOpen(s){const d=dispOf(s);return d.k==='loan'?d.ev:null;}
+const dispTag=s=>{const d=dispOf(s); if(!d.k)return'';
+  return `<span class="tag ${DISP[d.k].c}" data-tip="${esc(DISP[d.k].t+(d.ev.date?' ('+d.ev.date+')':'')+(d.ev.text?' — '+d.ev.text:''))}">${DISP[d.k].t}</span>`;};
 
 function say(msg,kind){const b=$('#banner');$('#btext').textContent=msg;
   b.className='banner on'+(kind?' '+kind:'');$('#bacts').innerHTML='';return b;}
@@ -1209,7 +1230,7 @@ document.addEventListener('click',e=>{
 $('#home').onclick=()=>{
   $('#q').value='';
   ['#f-pres','#f-year','#f-fam','#f-status','#f-exp'].forEach(x=>$(x).value='');
-  $('#f-unp').checked=false; $('#f-loan').checked=false;
+  $('#f-unp').checked=false; $('#f-disp').value='';
   $('#chk-all').checked=false; selected.clear(); lpage=1;
   go('list'); refreshFilters(); renderList(); counts();
   scrollTo({top:0,behavior:'smooth'});
@@ -1219,13 +1240,15 @@ $('#home').onclick=()=>{
 function filtered(){
   const q=$('#q').value.trim().toLowerCase(), p=$('#f-pres').value,
         y=$('#f-year').value, fa=$('#f-fam').value, unp=$('#f-unp').checked,
-        ex=$('#f-exp').value, ln=$('#f-loan').checked, st1=$('#f-status').value;
+        ex=$('#f-exp').value, dsel=$('#f-disp').value, st1=$('#f-status').value;
   return DB.spec.filter(s=>{
     if(p&&s.preservation!==p)return false;
     if(fa&&(s.family_ko||s.family_la)!==fa)return false;
     if(y&&!String(s.date||'').startsWith(y))return false;
     if(unp&&s.printed_at&&!needsReprint(s))return false;       /* 미출력 + 출력 뒤 바뀐 것 */
-    if(ln&&!loanOpen(s))return false;
+    if(dsel){const k=dispOf(s).k;
+      if(dsel==='in'&&k)return false; if(dsel==='loan'&&k!=='loan')return false;
+      if(dsel==='gone'&&!['gift','used','lost'].includes(k))return false;}
     if(ex==='none'){if(s.exp.dissect||s.exp.dna||s.exp.photo)return false;}
     else if(ex&&!s.exp[ex])return false;
     if(st1==='any'){if(s.status!=='new'&&s.status!=='unrec')return false;}   /* 후보 표시 = 신종·미기록만 */
@@ -1245,8 +1268,14 @@ function descOf(no,m){
   while(q.length){const x=q.shift(); if(seen.has(x.no))continue; seen.add(x.no); out.push(x); q.push(...(m.get(x.no)||[]));}
   return out;
 }
+/* 계보 맨 위(원 tube) 번호 — 분리하지 않은 표본은 자기 자신. 모체가 지워졌으면 끊긴 그 번호 */
+function rootNo(s){
+  let r=s; const seen=new Set([s.no]);
+  while(r.parent_no&&!seen.has(r.parent_no)){const p=specOf(r.parent_no); if(!p)return r.parent_no; seen.add(p.no); r=p;}
+  return r.no;
+}
 const kidLine=x=>`${x.no} ${SEX[x.sex]||''}${x.count||0} ${PRES[x.preservation]||''}${x.container?' '+x.container:''}${x.position?' '+posShort(x.position):''}`
-  +`${x.exp.dna?' · DNA':''}${x.exp.dissect?' · 해부':''}`;
+  +`${x.exp.dna?' · DNA':x.exp.dna_spare?' · DNA 예비':''}${x.exp.dissect?' · 해부':''}`;
 const userLogs=s=>(s.log||[]).filter(l=>!SYSLOG.has(l.type));
 function expTags(s,m){
   const t=[], xn=esc(s.exp.note||'');           /* 실험 비고를 툴팁으로 */
@@ -1256,13 +1285,14 @@ function expTags(s,m){
   if(s.exp.dna){const dt=[dnaTxt(s),s.exp.note||''].filter(Boolean).join(' · ');
     const ok=s.dna&&Array.isArray(s.dna.seq)&&s.dna.seq.some(q=>q.result==='ok');
     t.push(`<span class="tag g" ${dt?`data-tip="${esc('DNA · '+dt)}"`:''}>DNA${ok?' ✓':''}</span>`);}
+  if(s.exp.dna_spare&&!s.exp.dna)t.push(`<span class="tag gs" data-tip="DNA 예비 — 본 시료의 추출이 실패하면 대신 쓸 개체(아직 추출 안 함)">DNA 예비</span>`);
   if(s.exp.photo)t.push(`<span class="tag b" ${xn?`data-tip="사진 · ${xn}"`:''}>사진</span>`);
   /* 분리해 낸 번호에서 한 실험 — 원 tube 에는 표시를 따로 달지 않아도 여기서 보인다 */
   const ds=descOf(s.no,m), dd=ds.filter(x=>x.exp.dna), dx=ds.filter(x=>x.exp.dissect);
   if(dd.length)t.push(`<span class="tag ol" data-tip="${esc('이 tube에서 분리한 번호의 DNA\n'+dd.map(kidLine).join('\n'))}">↳DNA ${dd.length}</span>`);
   if(dx.length)t.push(`<span class="tag ol" data-tip="${esc('이 tube에서 분리한 번호의 해부\n'+dx.map(kidLine).join('\n'))}">↳해부 ${dx.length}</span>`);
-  const lo=loanOpen(s), ul=userLogs(s);
-  if(lo)t.push(`<span class="tag r" data-tip="대여중${esc(lo.text?' — '+lo.text:'')}${esc(lo.date?' ('+lo.date+')':'')}">대여중</span>`);
+  const dp=dispOf(s), ul=userLogs(s);
+  if(dp.k)t.push(dispTag(s));
   else if(ul.length){
     const last=ul.slice(-2).map(l=>[l.date,LTYPE[l.type]||l.type,l.text].filter(Boolean).join(' ')).join('\n');
     t.push(`<span class="tag" data-tip="${esc(last)}">기록 ${ul.length}</span>`);
@@ -1347,7 +1377,7 @@ function prnCell(s){
 }
 const selinfo=()=>$('#selinfo').textContent=selected.size?`${selected.size}건 선택됨`:'';
 const filterChanged=()=>{lpage=1;renderList();};
-['#q','#f-pres','#f-year','#f-fam','#f-exp','#f-status','#f-unp','#f-loan'].forEach(s=>{
+['#q','#f-pres','#f-year','#f-fam','#f-exp','#f-status','#f-unp','#f-disp'].forEach(s=>{
   $(s).addEventListener('input',filterChanged); $(s).addEventListener('change',filterChanged);});
 /* 머리 체크박스 = 지금 보이는 페이지만 */
 $('#chk-all').onchange=e=>{
@@ -1355,6 +1385,8 @@ $('#chk-all').onchange=e=>{
   all.slice(from,from+lsize).forEach(s=>e.target.checked?selected.add(s.no):selected.delete(s.no));
   renderList();
 };
+$('#sel-ho').onclick=()=>{if(!selected.size)return say('왼쪽 체크박스로 표본을 먼저 고르십시오.','warn');
+  openHandover([...selected].sort((a,b)=>numOf(a)-numOf(b)),null);};
 $('#sel-to-q').onclick=()=>{if(!selected.size)return say('선택된 표본이 없습니다.','warn');
   [...selected].forEach(addQ); goPrint();};
 
@@ -1856,7 +1888,7 @@ function dateStr(s){
 function renderLog(){
   $('#logtb').innerHTML=editLog.length?editLog.map((e,i)=>`<tr>
     <td class="c mono">${esc(e.date||'')}</td>
-    <td class="c"><span class="tag ${e.type==='loan'?'r':e.type==='return'?'g':''}">${LTYPE[e.type]||e.type}</span></td>
+    <td class="c"><span class="tag ${e.type==='loan'||e.type==='lost'?'r':e.type==='return'?'g':e.type==='gift'||e.type==='used'?'k':SYSLOG.has(e.type)?'ol':''}">${LTYPE[e.type]||e.type}</span></td>
     <td>${esc(e.text||'')}</td>
     <td class="c"><button class="btn sm dgr" data-ldel="${i}">×</button></td></tr>`).join('')
     :`<tr><td colspan="4" style="padding:14px;text-align:center;color:var(--mut)">기록이 없습니다.</td></tr>`;
@@ -1920,6 +1952,7 @@ function fillEntry(no){
   v('#e-pos',s&&s.position); contChanged();
   setStatus(s?s.status:'');
   $('#x-dissect').checked=!!(s&&s.exp.dissect); $('#x-dna').checked=!!(s&&s.exp.dna);
+  $('#x-dnasp').checked=!!(s&&s.exp.dna_spare&&!s.exp.dna);
   $('#x-photo').checked=!!(s&&s.exp.photo); v('#x-note',s&&s.exp.note);
   $('#x-gen').value=(s&&s.exp.gen_cont)?'sep':'';
   v('#x-gencont',s&&s.exp.gen_cont); v('#x-genpos',s&&s.exp.gen_pos); genUI();
@@ -1934,6 +1967,9 @@ function fillEntry(no){
 }
 $('#e-new').onclick=()=>go('entry','new');
 
+/* 분리할 때 모체에서 그대로 복사해 가는 칸 — 채집과 동정 */
+const KINF={site_id:'채집지',date:'채집일',date2:'종료일',method:'채집방법',collector:'채집자',collector_en:'채집자(영문)',
+  kor:'국명',sci:'학명',order_ko:'목',family_ko:'과',det_by:'동정자',det_by_en:'동정자(영문)',det_date:'동정일',status:'동정 상태'};
 function saveRec(){
   let no=$('#e-no').value.trim();
   if(no&&numOf(no))no=fmtNo(numOf(no));
@@ -1997,6 +2033,7 @@ function saveRec(){
     printed_at:(old&&old.printed_at)||null,
   };
   if(dnaNew)rec.dna=dnaNew; else delete rec.dna;
+  if($('#x-dnasp').checked&&!$('#x-dna').checked)rec.exp.dna_spare=true; else delete rec.exp.dna_spare;
   ensureContainer(cont,$('#e-pres').value);
   if(rec.exp.gen_cont)ensureContainer(rec.exp.gen_cont,/^DRY/.test(rec.exp.gen_cont)?'dry':'wet');
   if(rec.dna&&rec.dna.box)ensureContainer(rec.dna.box,'wet');
@@ -2009,6 +2046,28 @@ function saveRec(){
   $('#e-title').textContent=`표본 ${rec.no}`; $('#e-del').style.display=$('#e-del2').style.display='';
   paintLabelBtn(rec);
   $('#e-splitwrap').style.display='';
+  /* 원 tube 의 채집·동정을 고치면 — 분리한 번호들은 분리할 때 복사해 간 값을 그대로 갖고 있다.
+     예전 값을 그대로 따르던 번호에만 같이 고칠지 묻는다(일부러 다르게 둔 번호는 건드리지 않음) */
+  if(old){
+    const ch=Object.keys(KINF).filter(k=>String(old[k]??'')!==String(rec[k]??''));
+    const ds=ch.length?descOf(rec.no).filter(x=>ch.some(k=>String(x[k]??'')===String(old[k]??''))):[];
+    if(ds.length){
+      const bw=say(`${rec.no}의 ${jUl(ch.map(k=>KINF[k]).join('·'))} 바꿨습니다. 여기서 분리한 번호 ${ds.length}건`
+        +`(${ds.slice(0,4).map(x=>x.no).join(', ')}${ds.length>4?' 외':''})은 예전 값을 그대로 갖고 있습니다 — 같이 고칠까요?`,'warn');
+      const y=document.createElement('button'); y.className='btn sm pri'; y.textContent=`분리 번호 ${ds.length}건도 같이`;
+      y.onclick=async()=>{
+        await bkPut('분리 번호 맞추기 직전');
+        ds.forEach(x=>{const f=ch.filter(k=>String(x[k]??'')===String(old[k]??''));
+          f.forEach(k=>{x[k]=rec[k];});
+          x.log=[...(x.log||[]),{date:today(),type:'sync',text:`모체 ${rec.no}에 맞춰 ${f.map(k=>KINF[k]).join('·')} 수정`}];});
+        mark(true); renderList(); refreshChecks(); bw.classList.remove('on');
+        say(`분리 번호 ${ds.length}건을 ${rec.no}에 맞췄습니다 — 확인 후 동기화하십시오.`);};
+      const nn=document.createElement('button'); nn.className='btn sm'; nn.textContent='그대로 두기';
+      nn.onclick=()=>bw.classList.remove('on');
+      $('#bacts').append(y,nn);
+      return rec;
+    }
+  }
   /* 분리된 번호의 개체수를 손으로 바꾸면 모체와 합이 어긋난다 — 맞출지 묻는다 */
   const par=old&&old.parent_no?specOf(old.parent_no):null;
   if(par&&(old.count||0)!==(rec.count||0)){
@@ -2043,7 +2102,7 @@ $('#e-next').onclick=()=>{
   $('#e-count').value=1; $('#e-sex').value='';
   ['#e-kor','#e-sci','#e-order','#e-family','#e-note','#x-note','#e-search','#e-pos','#e-detdate',
    '#x-gencont','#x-genpos'].forEach(x=>$(x).value='');
-  $('#x-dissect').checked=$('#x-dna').checked=$('#x-photo').checked=false;
+  $('#x-dissect').checked=$('#x-dna').checked=$('#x-photo').checked=$('#x-dnasp').checked=false;
   $('#x-gen').value=''; genUI(); dnaFill(null);
   setStatus('');
   editLog=[]; renderLog(); closeAC();
@@ -2189,8 +2248,10 @@ function renderSeq(){
 }
 $('#d-addseq').onclick=()=>{editSeq.push({marker:editSeq.some(q=>q.marker==='COI')?'':'COI',result:'',acc:''});renderSeq();};
 $('#x-dna').addEventListener('change',()=>{
-  if($('#x-dna').checked&&!editSeq.length){editSeq=[{marker:'COI',result:'',acc:''}];renderSeq();}
+  if($('#x-dna').checked){ $('#x-dnasp').checked=false;          /* 예비를 실제로 쓰면 추출 표본이 된다 */
+    if(!editSeq.length){editSeq=[{marker:'COI',result:'',acc:''}];renderSeq();} }
   dnaUI();});
+$('#x-dnasp').addEventListener('change',()=>{ if($('#x-dnasp').checked&&$('#x-dna').checked){$('#x-dna').checked=false; dnaUI();} });
 $('#d-cont').addEventListener('blur',()=>{$('#d-cont').value=boxNorm($('#d-cont').value,'wet');});
 $('#d-pos').addEventListener('blur',()=>{const v=$('#d-pos').value, n=posNorm(v); $('#d-pos').value=n||v.trim().toUpperCase();});
 function dnaFill(s){
@@ -2264,7 +2325,7 @@ function spBox(){
 const spN=()=>{const s=specOf(editing);return Math.max(1,Math.min(+$('#sp-n').value||1,(s&&s.count)||1));};
 const spNeed=()=>spMode==='conv'?1:(spOne==='1'?1:spN());
 /* DNA용이거나 건조(핀 하나 = 개체 하나)로 옮기면 개체마다 번호가 기본 */
-const spAutoOne=()=>($('#sp-dna').checked||$('#sp-pres').value==='dry')?'n':'1';
+const spAutoOne=()=>($('#sp-dna').checked||$('#sp-dnasp').checked||$('#sp-pres').value==='dry')?'n':'1';
 function spFillBoxes(){
   const pres=$('#sp-pres').value, type=pres==='wet'?'grid':'free';
   const boxes=allContainers().filter(c=>c.type===type), s=specOf(editing);
@@ -2278,7 +2339,7 @@ function spFillBoxes(){
 function spBoxChanged(quiet){
   const b=spBox();
   /* DNA 상자(CO1·DNA…)로 옮기면 DNA 표시를 켠다 — 직접 건드렸으면 그대로 */
-  if(!spDnaT&&spMode==='split'){$('#sp-dna').checked=isDnaBox(b.id); if(!spOneT)spOne=spAutoOne();}
+  if(!spDnaT&&spMode==='split'&&!$('#sp-dnasp').checked){$('#sp-dna').checked=isDnaBox(b.id); if(!spOneT)spOne=spAutoOne();}
   if(!quiet)spModeUI();
 }
 function spSuggest(){
@@ -2304,7 +2365,7 @@ function spModeUI(){
 }
 $('#e-split').onclick=()=>{const s=specOf(editing);if(!s)return;
   $('#splitbox').style.display=''; $('#sp-n').max=Math.max(1,s.count||1); $('#sp-n').value=1;
-  $('#sp-sex').value='__same'; $('#sp-dissect').checked=false; $('#sp-dna').checked=false;
+  $('#sp-sex').value='__same'; $('#sp-dissect').checked=false; $('#sp-dna').checked=false; $('#sp-dnasp').checked=false;
   spOneT=spPosT=spDnaT=spPresT=false;
   spMode=(s.count||0)<=1?'conv':'split';
   /* 분리는 같은 보존 형태(액침 → 다른 tube)가 흔하고, 전환은 반대쪽으로 */
@@ -2318,7 +2379,10 @@ $$('#sp-one button').forEach(b=>b.onclick=()=>{spOne=b.dataset.o; spOneT=true; s
 $('#sp-pres').addEventListener('change',()=>{spPresT=true; spFillBoxes(); if(!spOneT)spOne=spAutoOne(); spModeUI();});
 $('#sp-cont').addEventListener('input',()=>{spPosT=false; spBoxChanged();});
 $('#sp-cont').addEventListener('blur',()=>{$('#sp-cont').value=boxNorm($('#sp-cont').value,$('#sp-pres').value); spPosT=false; spBoxChanged();});
-$('#sp-dna').addEventListener('change',()=>{spDnaT=true; if(!spOneT){spOne=spAutoOne(); spPosT=false;} spModeUI();});
+$('#sp-dna').addEventListener('change',()=>{spDnaT=true; if($('#sp-dna').checked)$('#sp-dnasp').checked=false;
+  if(!spOneT){spOne=spAutoOne(); spPosT=false;} spModeUI();});
+$('#sp-dnasp').addEventListener('change',()=>{spDnaT=true; if($('#sp-dnasp').checked)$('#sp-dna').checked=false;
+  if(!spOneT){spOne=spAutoOne(); spPosT=false;} spModeUI();});
 $('#sp-n').addEventListener('input',()=>{spSuggest(); spPrev();});
 $('#sp-sex').addEventListener('change',spPrev);
 $('#sp-pos').addEventListener('input',()=>{spPosT=true; spPrev();});
@@ -2337,6 +2401,7 @@ function spPrev(){const s=specOf(editing);if(!s)return;
     +(k===1?`${n}개체를 번호 하나로`:`1개체씩 번호 ${n}개`)+` · ${where} · ${s.no} 잔량 ${s.count||0} → ${left}`;
   if(left===0)m+=' — 전량을 꺼내면 원 번호가 0개체로 남습니다. 통째로 옮기는 것이면 보존 전환을 쓰십시오.';
   if($('#sp-dna').checked&&k===1&&n>1)m+=' ⚠ DNA용인데 여러 개체가 번호 하나 — 서열마다 증거표본을 가리키려면 ‘개체마다 번호’가 맞습니다.';
+  if($('#sp-dnasp').checked&&k===1&&n>1)m+=' ⚠ 예비를 한 번호에 모으면, 그중 하나를 쓰게 됐을 때 어느 개체인지 가릴 수 없습니다 — ‘개체마다 번호’가 안전합니다.';
   if(cells.length&&cells.length!==k)m+=` ⚠ 칸이 ${cells.length}개 — 번호 ${k}개에 맞춰 ${k}칸을 적거나 비우십시오.`;
   $('#sp-prev').textContent=m;}
 $('#sp-go').onclick=async()=>{
@@ -2357,7 +2422,8 @@ $('#sp-go').onclick=async()=>{
     if(cont){s.container=cont; s.position=cells.join(' '); ensureContainer(cont,pres);}
     else if((/^WET/.test(s.container)&&pres==='dry')||(/^DRY/.test(s.container)&&pres==='wet')){s.container='';s.position='';}
     if($('#sp-dissect').checked)s.exp.dissect=true;
-    if($('#sp-dna').checked)s.exp.dna=true;
+    if($('#sp-dna').checked){s.exp.dna=true; delete s.exp.dna_spare;}
+    else if($('#sp-dnasp').checked&&!s.exp.dna)s.exp.dna_spare=true;
     s.log=[...(s.log||[]),{date:d,type:'conv',
       text:`${from} → ${PRES[pres]}${s.container?' '+s.container+(s.position?' '+posShort(s.position):''):''}`}];
     mark(true); bkSoon('보존 전환'); renderList(); counts(); refreshChecks(); $('#splitbox').style.display='none';
@@ -2368,7 +2434,7 @@ $('#sp-go').onclick=async()=>{
   if(cells.length&&cells.length!==k)return say(`칸을 ${k}개 적어 주십시오 (지금 ${cells.length}개). 칸 없이 두려면 칸을 비우십시오.`,'bad');
   await bkPut('개체 분리 직전');
   const sex=$('#sp-sex').value==='__same'?s.sex:$('#sp-sex').value;
-  const dna=$('#sp-dna').checked, dis=$('#sp-dissect').checked;
+  const dna=$('#sp-dna').checked, spare=!dna&&$('#sp-dnasp').checked, dis=$('#sp-dissect').checked;
   if(cont)ensureContainer(cont,pres);
   let num=numOf(nextNo()); const made=[];
   for(let i=0;i<k;i++,num++){
@@ -2377,14 +2443,14 @@ $('#sp-go').onclick=async()=>{
     ['printed_sig','label_edit','label_base','dna'].forEach(f=>delete c[f]);
     Object.assign(c,{no:fmtNo(num), legacy_no:null, parent_no:s.no, preservation:pres,
       count:one?n:1, sex, container:cont, position:cells[i]||'', printed_at:null,
-      exp:{dissect:dis, dna, photo:false, note:'', gen_cont:'', gen_pos:''},
-      log:[{date:d,type:'split',text:`${s.no} 에서 분리${dna?' — DNA용':''}`}]});
+      exp:{dissect:dis, dna, photo:false, note:'', gen_cont:'', gen_pos:'', ...(spare?{dna_spare:true}:{})},
+      log:[{date:d,type:'split',text:`${s.no} 에서 분리${dna?' — DNA용':spare?' — DNA 예비':''}`}]});
     if(dna)c.dna={seq:[{marker:'COI'}]};
     const r=normSpec(c); DB.spec.push(r); made.push(r);
   }
   s.count=(s.count||0)-n;
   s.log=[...(s.log||[]),{date:d,type:'split',
-    text:`${SEX[sex]||''}${n}개체 분리 → ${made.map(x=>x.no+(x.position?' '+x.position:'')).join(', ')} (${PRES[pres]}${cont?' '+cont:''})${dna?' · DNA용':''} · 잔량 ${s.count}`}];
+    text:`${SEX[sex]||''}${n}개체 분리 → ${made.map(x=>x.no+(x.position?' '+x.position:'')).join(', ')} (${PRES[pres]}${cont?' '+cont:''})${dna?' · DNA용':spare?' · DNA 예비':''} · 잔량 ${s.count}`}];
   DB.spec.sort((a,b)=>numOf(a.no)-numOf(b.no));
   try{if(cont)localStorage.setItem('ilspbox_'+pres,cont);}catch(e){}
   mark(true); bkSoon('개체 분리'); renderList(); counts(); refreshChecks(); $('#splitbox').style.display='none';
@@ -2566,7 +2632,9 @@ function renderBox(){
   const head=`<div class="rowflex" style="margin-bottom:10px"><b>${esc(c.id)}</b>
     ${c.label?`<span>${esc(c.label)}</span>`:''}
     ${c.place?`<span class="tag">위치: ${esc(c.place)}</span>`:''}
-    ${c.note?`<span class="hint">${esc(c.note)}</span>`:''}</div>`;
+    ${c.note?`<span class="hint">${esc(c.note)}</span>`:''}
+    <span class="grow"></span>${!snapMode&&inBox.length?'<button class="btn sm" id="b-ho">이 박스 내보내기 · 돌려받기</button>':''}</div>`;
+  const bindHo=()=>{if($('#b-ho'))$('#b-ho').onclick=()=>openHandover(inBox.map(s=>s.no),boxSel);};
   if(c.type==='grid'){
     const used=new Set([...inBox.flatMap(s=>posList(s.position)),...parts.flatMap(s=>posList(s.exp.gen_pos)),
       ...dparts.flatMap(s=>posList(s.dna.pos))].filter(Boolean));
@@ -2586,7 +2654,7 @@ function renderBox(){
     }
     V.innerHTML=head+g+'</div>'+(inBox.length
       ?'<div style="font-weight:700;margin-top:16px">이 박스의 종 구성</div>'+speciesSummary(inBox):'')+partsLine+dnaLine;
-    bindEdit2();
+    bindEdit2(); bindHo();
     $('#b-detail').innerHTML='<p class="hint">칸을 누르면 그 tube의 표본이 표시됩니다.</p>';
     $$('#bview .bc').forEach(d=>d.onmousedown=ev=>{
       ev.preventDefault();
@@ -2607,7 +2675,7 @@ function renderBox(){
       ? speciesSummary(inBox)+specTable(inBox)
       : '<p class="hint">이 상자에 배정된 표본이 없습니다.</p>')+partsLine+dnaLine;
     $('#b-detail').innerHTML='<p class="hint">건조 상자는 표본이 위에 바로 나열됩니다.</p>';
-    bindEdit2();
+    bindEdit2(); bindHo();
   }
 }
 $('#b-sel').onchange=()=>{boxSel=$('#b-sel').value;renderBox();};
@@ -3523,6 +3591,138 @@ function renderSiteList(){
 }
 $('#sl-q').addEventListener('input',renderSiteList);
 
+/* ═══════════ 내보내기 · 돌려받기 — 박스째 또는 고른 표본을 한꺼번에 ═══════════
+   다른 연구자에게 분석을 맡기거나(대여) 아예 넘기거나(이관), 분석에 다 쓰였거나(소모), 돌려받을 때(반납).
+   번호마다 날짜가 붙은 기록이 남을 뿐 표본 기록은 지우지 않는다. 넘기기 전에 확인할 것을 먼저 짚어 준다. */
+const HOTYPE=[['loan','대여','돌려받을 예정 — 비파괴 추출 뒤 증거표본을 돌려받는 경우 등'],
+  ['gift','이관','돌려받지 않음 — 상대가 보관합니다. 그쪽에서 새 번호를 주면 메모로 남기십시오'],
+  ['used','소모','분석에 다 써서 없어짐 — 파괴 추출 등. 번호는 서열의 증거표본 번호로 계속 남습니다'],
+  ['lost','분실','어디 있는지 모름'],
+  ['return','반납','돌아옴 — 다시 소장. 넣은 박스·칸은 표본입력에서 고치십시오']];
+const HOL=Object.fromEntries(HOTYPE.map(x=>[x[0],x[1]]));
+let HO=null;
+function openHandover(nos,box){
+  if(snapMode)return say('읽기 전용 스냅샷에서는 기록할 수 없습니다.','warn');
+  const specs=nos.map(specOf).filter(Boolean);
+  if(!specs.length)return say('대상 표본이 없습니다.','warn');
+  const extras=box?DB.spec.filter(s=>s.dna&&s.dna.box===box&&s.container!==box):[];
+  const c=box?(allContainers().find(x=>x.id===box)||{}):null;
+  HO={nos:specs.map(s=>s.no), box, type:'loan'};
+  openModal({wide:true,
+    title:`내보내기 · 돌려받기 — ${box?`박스 <span class="mono">${esc(box)}</span> · `:''}${specs.length}건`,
+    body:`<div class="seg" id="ho-type">${HOTYPE.map(([k,l])=>`<button data-t="${k}">${l}</button>`).join('')}</div>
+      <p class="hint" id="ho-help" style="margin:6px 0 12px"></p>
+      <div class="grid g3">
+        <div><label class="fl">날짜</label><input type="date" id="ho-date" value="${today()}"></div>
+        <div><label class="fl">누구에게 · 어디로</label><input type="text" id="ho-who" placeholder="예: 홍길동 박사 (OO대 곤충분류실)"></div>
+        <div><label class="fl">목적 · 약속</label><input type="text" id="ho-why" placeholder="예: COI 바코딩 — 비파괴 추출 후 증거표본 반환, 2027-03까지"></div>
+      </div>
+      <div style="margin-top:10px;display:grid;gap:6px">
+        <label class="rowflex" style="gap:6px;flex-wrap:nowrap" id="ho-clearwrap"><input type="checkbox" id="ho-clear" style="width:auto;flex:none">
+          <span>보관 칸 비우기 — 돌아오지 않으니 칸을 다른 표본에 쓸 수 있게 합니다(어느 칸이었는지는 기록에 남음)</span></label>
+        ${box?`<label class="rowflex" style="gap:6px;flex-wrap:nowrap" id="ho-placewrap"><input type="checkbox" id="ho-place" style="width:auto;flex:none" checked>
+          <span id="ho-placetxt"></span></label>`:''}
+      </div>
+      <div id="ho-warn" style="margin-top:10px"></div>
+      <div class="tbl-wrap" style="margin-top:10px;max-height:330px"><table>
+        <thead><tr><th class="c" style="width:30px"><input type="checkbox" id="ho-all" checked style="width:auto"></th><th>번호</th><th>종</th>
+          <th class="c">개체</th><th class="c">보관</th><th>지금 상태</th><th>모체</th></tr></thead>
+        <tbody id="ho-tb">${specs.map(s=>`<tr><td class="c"><input type="checkbox" data-hs="${esc(s.no)}" checked style="width:auto"></td>
+          <td class="mono n">${esc(s.no)}</td><td>${esc(s.kor||'')} <span class="sci">${sciFmt(s.sci)}</span></td>
+          <td class="c n">${SEX[s.sex]||''}${s.count||0}</td><td class="c mono n">${esc(s.container||'')}${s.position?' '+esc(posShort(s.position)):''}</td>
+          <td class="n">${dispTag(s)||'<span class="hint">소장</span>'}</td><td class="mono n">${s.parent_no?'← '+esc(s.parent_no):''}</td></tr>`).join('')}</tbody></table></div>
+      ${extras.length?`<div class="warnbox" style="margin-top:10px"><b>이 박스에 든 다른 번호의 DNA 추출물 ${extras.length}건</b> — 증거표본은 그대로 있고 추출물만 함께 나갑니다. 체크한 번호에는 메모로 남깁니다.<br>
+        ${extras.map(s=>`<label style="display:inline-flex;gap:5px;align-items:center;margin-right:12px"><input type="checkbox" data-hx="${esc(s.no)}" checked style="width:auto">
+          <span class="mono">${esc(s.no)}</span> <span class="hint">${esc(posShort((s.dna||{}).pos||''))}</span></label>`).join('')}</div>`:''}`,
+    foot:`<button class="btn" id="ho-csv" title="받는 분에게 줄 목록 — 채집 정보·좌표·모체 번호 포함, 동정 비고 같은 내부 메모는 뺍니다">인계 목록 내려받기 (CSV)</button>
+      <span class="hint" id="ho-info"></span><div class="grow"></div>
+      <button class="btn" id="ho-cancel">취소</button><button class="btn pri" id="ho-go">기록하기</button>`});
+  const paint=()=>{
+    $$('#ho-type button').forEach(b=>b.classList.toggle('on',b.dataset.t===HO.type));
+    $('#ho-help').textContent=HOTYPE.find(x=>x[0]===HO.type)[2];
+    const gone=['gift','used','lost'].includes(HO.type);
+    $('#ho-clearwrap').style.display=gone?'':'none'; $('#ho-clear').checked=gone;
+    if(box){
+      const back=HO.type==='return';
+      $('#ho-placetxt').textContent=back
+        ?`박스 ${box}의 보관위치를 되돌리기 (지금: ${c.place||'—'}${c.place_prev!==undefined?` → ${c.place_prev||'(빈 칸)'}`:''})`
+        :`박스 ${box}의 보관위치를 받는 사람으로 바꾸기 (지금: ${c.place||'—'})`;
+      $('#ho-placewrap').style.display=(HO.type==='used'||HO.type==='lost')?'none':'';
+    }
+    hoWarn(); hoInfo();
+  };
+  $$('#ho-type button').forEach(b=>b.onclick=()=>{HO.type=b.dataset.t; paint();});
+  $('#ho-all').onchange=e=>{$$('#ho-tb [data-hs]').forEach(i=>i.checked=e.target.checked); hoWarn(); hoInfo();};
+  $$('#ho-tb [data-hs]').forEach(i=>i.onchange=()=>{hoWarn(); hoInfo();});
+  $('#ho-cancel').onclick=()=>closeModal();
+  $('#ho-go').onclick=hoApply;
+  $('#ho-csv').onclick=()=>hoCsv();
+  paint();
+}
+const hoSel=()=>$$('#ho-tb [data-hs]:checked').map(i=>i.dataset.hs);
+function hoInfo(){ $('#ho-info').textContent=`${hoSel().length}건 선택`; }
+/* 넘기기 전에 — 1개체 1번호인지, tube에 라벨이 있는지, 사진이 있는지 */
+function hoWarn(){
+  const W=$('#ho-warn'); if(!W)return;
+  if(!['loan','gift','used'].includes(HO.type)){W.innerHTML='';return;}
+  const S=hoSel().map(specOf).filter(Boolean);
+  const multi=S.filter(s=>(s.exp.dna||s.exp.dna_spare)&&(s.count||0)>1), unp=S.filter(s=>!s.printed_at),
+    nop=S.filter(s=>(s.exp.dna||s.exp.dna_spare)&&!s.exp.photo), spr=S.filter(s=>s.exp.dna_spare&&!s.exp.dna);
+  const li=[];
+  if(multi.length)li.push(`<div>• <b>한 번호에 여러 개체</b> ${multi.map(s=>`<a class="lnk mono" data-hosp="${esc(s.no)}">${esc(s.no)}</a>(${SEX[s.sex]||''}${s.count})`).join(' ')}
+    — 넘기면 더는 나눌 수 없습니다. 결과를 개체별로 받으려면 먼저 1개체씩 번호를 나누십시오(번호를 누르면 분리 창이 열립니다).</div>`);
+  if(unp.length)li.push(`<div>• <b>라벨을 아직 안 뽑은 번호 ${unp.length}건</b> — tube 안에 라벨이 없으면 칸 위치만으로 번호를 가려야 하고, 박스가 섞이면 번호를 잃습니다.
+    <button class="btn sm" id="ho-print">이 ${unp.length}건 출력 대기열에</button></div>`);
+  if(nop.length)li.push(`<div>• <b>사진 기록 없는 DNA·예비 표본 ${nop.length}건</b> — 소모되면 사진이 남는 유일한 형태 기록입니다(④실험의 사진 촬영).</div>`);
+  if(spr.length)li.push(`<div>• <b>DNA 예비 ${spr.length}건</b> ${spr.map(s=>esc(s.no)).join(' ')} — 쓰게 되면 어느 tube(번호)를 썼는지 알려 달라고 부탁하십시오.
+    쓴 것은 DNA 추출로 바꾸고, 안 쓴 예비는 돌아오면 반납으로 기록하면 됩니다.</div>`);
+  W.innerHTML=li.length?`<div class="warnbox"><b>넘기기 전에 확인</b>${li.join('')}</div>`:'';
+  $$('#ho-warn [data-hosp]').forEach(a=>a.onclick=()=>{ if(closeModal())spPreset(a.dataset.hosp); });
+  if($('#ho-print'))$('#ho-print').onclick=()=>{ unp.forEach(s=>addQ(s.no)); if(closeModal())goPrint(); };
+}
+async function hoApply(){
+  const type=HO.type, d=$('#ho-date').value||today(), who=$('#ho-who').value.trim(), why=$('#ho-why').value.trim();
+  if((type==='loan'||type==='gift')&&!who)return say('누구에게 주는지 적어 주십시오 — 나중에 찾을 단서입니다.','warn');
+  const sel=hoSel(); if(!sel.length)return say('고른 표본이 없습니다.','warn');
+  const clear=['gift','used','lost'].includes(type)&&$('#ho-clear').checked;
+  await bkPut(`${HOL[type]} 기록 직전`);
+  sel.forEach(no=>{const s=specOf(no); if(!s)return;
+    const where=s.container?`${s.container}${s.position?' '+posShort(s.position):''}`:'';
+    const text=[who,why,where&&type!=='return'?`${where}에서`:''].filter(Boolean).join(' — ');
+    s.log=[...(s.log||[]),{date:d,type,text}].sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    if(clear){s.container='';s.position='';}
+  });
+  $$('#mbody [data-hx]:checked').forEach(i=>{const s=specOf(i.dataset.hx); if(!s)return;
+    s.log=[...(s.log||[]),{date:d,type:'memo',text:`DNA 추출물이 박스 ${HO.box}와 함께 ${HOL[type]}${who?' — '+who:''}`}];});
+  if(HO.box&&$('#ho-place')&&$('#ho-place').checked&&$('#ho-placewrap').style.display!=='none'){
+    let c=contOf(HO.box);
+    if(!c){c={...(allContainers().find(x=>x.id===HO.box)||{id:HO.box,type:'grid',cols:9,rows:9,label:'',note:''})}; DB.cont.push(c);}
+    if(type==='return'){ if(c.place_prev!==undefined){c.place=c.place_prev; delete c.place_prev;} }
+    else{ if(c.place_prev===undefined)c.place_prev=c.place||''; c.place=`${who||HOL[type]} — ${d} ${HOL[type]}`; }
+  }
+  const n=sel.length;
+  closeModal(true);
+  mark(true); bkSoon(`${HOL[type]} 기록`); renderList(); counts(); refreshChecks();
+  if($('#v-box').classList.contains('on'))renderBox();
+  say(`${n}건에 '${HOL[type]}'${jong(HOL[type])>0?'을':'를'} 기록했습니다 (${d}${who?' · '+who:''}). 표본 기록은 그대로 남습니다 — 확인 후 동기화하십시오.`,'warn');
+}
+/* 인계 목록 — 받는 분이 BOLD·GenBank 에 바로 쓸 수 있는 칸만. 동정 비고 같은 내부 메모는 넣지 않는다 */
+function hoCsv(){
+  const S=hoSel().map(specOf).filter(Boolean);
+  if(!S.length)return say('고른 표본이 없습니다.','warn');
+  const H=['채집번호(시료 ID)','모체번호','계보 원번호','박스','칸','국명','학명','성별','개체수','보존',
+    '국가','지역(영문)','채집지(영문)','채집지(한글)','경도','위도','고도(m)','채집일','채집일(ISO)','종료일(ISO)',
+    '채집방법','채집자','동정자','추출번호'];
+  const q=v=>{v=v==null?'':String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
+  const L=[H.join(',')];
+  S.forEach(s=>{const st=siteOf(s.site_id)||{}; const pf=PROVFULL[shortProv(st.region)]||'';
+    L.push([s.no,s.parent_no,rootNo(s),s.container,posShort(s.position),s.kor,s.sci,SEX[s.sex]||'',s.count,PRES[s.preservation]||'',
+      'South Korea',pf?(WIDE[pf]||romanize(pf)):'',st.locality_en,st.locality_ko,fmt6(st.lon),fmt6(st.lat),st.elev,
+      s.date,fromRoman(s.date),fromRoman(s.date2),s.method,s.collector_en,s.det_by_en,(s.dna&&s.dna.id)||s.no].map(q).join(','));});
+  download(`인계목록_${HO.box||'선택'}_${$('#ho-date').value||today()}.csv`,'﻿'+L.join('\r\n'));
+  say(`인계 목록 ${S.length}건을 내려받았습니다 — 받는 분에게 채집번호를 시료 ID로 써 달라고 부탁하십시오.`);
+}
+
 /* ═══════════ 기록 점검 ═══════════
    번호·계보·DNA 표시·보관 칸·지점 표기가 서로 맞는지 본다.
    저절로 고치는 것은 없다 — [고치기]를 누를 때마다 직전 상태가 자동 백업에 남는다. */
@@ -3547,19 +3747,19 @@ function runChecks(){
   /* 2. DNA 상자 안인데 DNA 표시가 없음 */
   const moveSrc=new Set();
   DB.spec.forEach(s=>{
-    if(s.exp.dna||!isDnaBox(s.container))return;
+    if(s.exp.dna||s.exp.dna_spare||!isDnaBox(s.container))return;     /* 예비는 DNA 상자에 있어도 정상 */
     const p=s.parent_no?specOf(s.parent_no):null;
     const mv=!!(p&&p.exp.dna&&!p.dna&&!descOf(p.no,km).some(x=>x.exp.dna&&x.no!==s.no));
     if(mv)moveSrc.add(p.no);
     grp('dnabox','warn','DNA 상자에 들어 있는데 DNA 표시가 없음',
-      '보관 위치가 DNA 상자(번호·이름에 CO1·COI·DNA)인데 DNA 표시가 꺼져 있어 DNA 건수·필터에서 빠집니다.')
+      '보관 위치가 DNA 상자(번호·이름에 CO1·COI·DNA)인데 DNA 표시가 꺼져 있어 DNA 건수·필터에서 빠집니다. 실패 대비로 함께 둔 개체라면 ‘DNA 예비’로 표시하십시오.')
       .items.push({no:s.no, text:`${where(s)}${mv?` · 모체 ${p.no}에 DNA 표시가 대신 붙어 있음`:''}`,
         fix:mv?()=>{s.exp.dna=true;p.exp.dna=false;}:()=>{s.exp.dna=true;},
         fixLabel:mv?`표시를 ${p.no} → ${s.no}로 옮기기`:'DNA 표시 켜기'});
   });
-  /* 3. DNA 표시 + 한 번호에 여러 개체 */
+  /* 3. DNA 표시 + 한 번호에 여러 개체 (이미 넘겨 나간 표본은 나눌 수 없으니 제외) */
   DB.spec.forEach(s=>{
-    if(!s.exp.dna||(s.count||0)<=1||dupSet.has(s.no)||moveSrc.has(s.no))return;
+    if(!s.exp.dna||(s.count||0)<=1||dupSet.has(s.no)||moveSrc.has(s.no)||['gift','used','lost'].includes(dispOf(s).k))return;
     grp('dnamulti','warn','DNA 표시가 있는데 한 번호에 여러 개체',
       '서열 하나는 증거표본 한 개체에 묶여야 합니다(BOLD·GenBank도 개체 단위). 한 번호에 여러 마리가 있으면 어느 개체의 서열인지 가릴 수 없습니다 — 추출 전에 1개체씩 번호를 나누십시오.')
       .items.push({no:s.no, text:`${SEX[s.sex]||''}${s.count}개체 · ${where(s)}`,
@@ -3592,6 +3792,21 @@ function runChecks(){
     grp('cell','bad','한 칸을 둘 이상이 함께 씀','실제로는 tube 하나만 들어갑니다 — 어느 쪽 칸이 틀렸는지 확인하십시오.')
       .items.push({no:a[0].no, text:`${k} — ${a.map(x=>x.no+(x.part?'('+x.part+')':'')).join(', ')}`});
   });
+  /* 6-1. 분리 번호와 모체 — 채집 정보는 같아야 하고, 동정은 다를 수 있다(혼합 tube) */
+  const CF={site_id:'채집지',date:'채집일',date2:'종료일',collector:'채집자'};
+  const show=(k,v)=>k==='site_id'?(siteOf(v)?siteText(siteOf(v)):(v||'—')):(v||'—');
+  DB.spec.forEach(s=>{
+    const p=s.parent_no&&specOf(s.parent_no); if(!p)return;
+    const d=Object.keys(CF).filter(k=>String(s[k]??'')!==String(p[k]??''));
+    if(d.length)grp('kinmis','warn','분리 번호의 채집 정보가 모체와 다름',
+      '같은 tube에서 꺼낸 개체는 채집 정보가 같아야 합니다. 한쪽만 고쳐졌을 가능성이 큽니다 — 맞는 쪽을 확인하고, 모체 쪽이 맞으면 [모체 값으로]를 누르십시오.')
+      .items.push({no:s.no, text:`모체 ${p.no}와 다른 칸 — `+d.map(k=>`${CF[k]}: ${show(k,s[k])} ↔ ${show(k,p[k])}`).join(' · '),
+        fix:()=>{d.forEach(k=>{s[k]=p[k];});}, fixLabel:'모체 값으로'});
+    if(String(s.kor||'')!==String(p.kor||'')||String(s.sci||'')!==String(p.sci||''))
+      grp('kinid','info','분리 번호의 동정이 모체와 다름',
+        'DNA 결과 등으로 한 tube에 다른 종이 섞여 있었던 경우라면 정상입니다. 모체를 다시 동정하고 분리 번호를 깜빡한 것이면 맞추십시오.')
+        .items.push({no:s.no, text:`${s.kor||s.sci||'(미동정)'} ↔ 모체 ${p.no} ${p.kor||p.sci||'(미동정)'}`});
+  });
   /* 7. 잔량 0 인데 칸을 차지 */
   DB.spec.forEach(s=>{ if((s.count||0)===0&&s.container&&s.position)
     grp('zero','info','개체 0인데 보관 칸을 차지',
@@ -3610,6 +3825,21 @@ function runChecks(){
       '라벨을 직접 고친 뒤 원래 정보(지점·동정 등)가 바뀌었습니다. 고친 글자가 그대로 찍히므로 확인하십시오.')
       .items.push({no:s.no, text:dr.map(k=>LNAME[k]).join(', '),
         act:()=>{closeModal(true);openLabelEditor(s.no);}, actLabel:'라벨 편집'});});
+  /* 9-1. 밖에 나간 표본 */
+  const now=Date.now();
+  DB.spec.forEach(s=>{const d=dispOf(s); if(!d.k)return;
+    if(d.k==='loan'&&d.ev.date&&(now-Date.parse(d.ev.date))/864e5>180)
+      grp('loanlong','info','대여한 지 6개월이 넘음','돌려받을 예정이었다면 받는 분께 확인하고, 소모·이관됐다면 그렇게 기록하십시오.')
+        .items.push({no:s.no, text:`${d.ev.date} — ${d.ev.text||''}`});
+    if((d.k==='gift'||d.k==='used')&&s.exp.dna&&!(s.dna&&Array.isArray(s.dna.seq)&&s.dna.seq.some(q=>q.result)))
+      grp('dnaout','info','넘긴 DNA 표본 — 결과가 아직 기록되지 않음','서열 결과와 GenBank·BOLD 번호를 받으면 그 번호의 DNA 칸에 적으십시오. 소모된 표본은 이 기록이 남는 전부입니다.')
+        .items.push({no:s.no, text:`${DISP[d.k].t} ${d.ev.date} — ${d.ev.text||''}`});
+    if(['gift','used','lost'].includes(d.k)&&s.container)
+      grp('outcell','info','나간 표본이 아직 보관 칸에 적혀 있음','이관·소모·분실된 표본이 칸을 차지하고 있어 그 칸을 다른 표본에 쓸 수 없습니다.')
+        .items.push({no:s.no, text:`${DISP[d.k].t} · ${s.container}${s.position?' '+posShort(s.position):''}`,
+          fix:()=>{s.log=[...(s.log||[]),{date:today(),type:'memo',text:`보관 칸 비움 (${s.container}${s.position?' '+posShort(s.position):''})`}];
+            s.container='';s.position='';}, fixLabel:'칸 비우기'});
+  });
   /* 10. 모체 번호가 목록에 없음 */
   DB.spec.forEach(s=>{ if(s.parent_no&&!specOf(s.parent_no))
     grp('orphan','info','모체 번호가 목록에 없음','모체를 지웠거나 번호를 바꾼 경우입니다. 계보 연결만 끊기고 표본 자체는 문제없습니다.')
@@ -3681,7 +3911,8 @@ function spPreset(no){
     $('#sp-cont').value=dbox; $('#sp-dna').checked=true; spDnaT=true; spOne='n'; spOneT=true;
     $('#sp-n').value=(s.count||1)-1; spPosT=false; spModeUI();
     $('#splitbox').scrollIntoView({block:'center'});
-    say(`${no}: ${s.count}개체 중 ${s.count-1}개체를 1개체씩 새 번호로 나눕니다. 박스·칸을 확인하고 [분리]를 누르십시오 — ${no}에는 1개체가 남습니다.`,'warn');
+    say(`${no}: ${s.count}개체 중 ${s.count-1}개체를 1개체씩 새 번호로 나눕니다. 박스·칸을 확인하고 [분리]를 누르십시오 — ${no}에는 1개체가 남습니다. `
+      +`DNA는 ${no} 한 개체만 뽑고 나머지는 대비용으로 보낼 거면 'DNA 추출용' 대신 'DNA 예비'를 켜십시오.`,'warn');
   },80);
 }
 
@@ -3885,7 +4116,7 @@ function renderTaxonDossier(key){
   $$('#dossier [data-d]').forEach(a=>a.onclick=()=>fqPick(a.dataset.d));
   miniMapMulti(mapItems);
 }
-const expShort=s=>{const t=[];if(s.exp.dissect)t.push('해부');if(s.exp.dna)t.push('DNA');
+const expShort=s=>{const t=[];if(s.exp.dissect)t.push('해부');if(s.exp.dna)t.push('DNA');else if(s.exp.dna_spare)t.push('DNA 예비');
   if(s.exp.photo)t.push('사진');return t.length?' · '+t.join('·'):'';};
 
 function miniMap(st){
@@ -3922,9 +4153,9 @@ function renderDossier(no){
 
   const tags=[];
   if(s.status)tags.push(`<span class="tag ${s.status==='undet'?'':'w'}">${STATUS[s.status]}</span>`);
-  if(lo)tags.push(`<span class="tag r" title="${esc(lo.text||'')}">대여중</span>`);
+  if(dispOf(s).k)tags.push(dispTag(s));
 
-  const expTxt=[s.exp.dissect?'해부(생식기)':'',s.exp.dna?'DNA 추출':'',s.exp.photo?'사진 촬영':''].filter(Boolean).join(' · ')
+  const expTxt=[s.exp.dissect?'해부(생식기)':'',s.exp.dna?'DNA 추출':s.exp.dna_spare?'DNA 예비(실패하면 쓸 개체)':'',s.exp.photo?'사진 촬영':''].filter(Boolean).join(' · ')
     +(s.exp.gen_cont?` — 생식기 별도 보관: ${s.exp.gen_cont}${s.exp.gen_pos?' '+s.exp.gen_pos:''}`:'')
     +(s.exp.dna&&dnaTxt(s)?` — DNA: ${dnaTxt(s)}`:'');
   const lek=Object.keys(ledit(s)).filter(k=>lhas(s,k)), ldr=labelDrift(s);
@@ -3932,7 +4163,8 @@ function renderDossier(no){
     +(lek.length?` · 직접 수정 ${lek.length}줄 (${lek.map(k=>LNAME[k]).join(', ')})`:'')
     +(ldr.length?` · ⚠ 고친 뒤 자동 문구가 바뀐 줄: ${ldr.map(k=>LNAME[k]).join(', ')}`:'');
   const keep=[PRES[s.preservation]||'',SEX[s.sex]?SEX[s.sex]+' ':'',`${s.count||0}개체`,
-    s.container?`— ${s.container}${s.position?' '+posShort(s.position):''}`:'— 보관함 미지정'].join(' ');
+    s.container?`— ${s.container}${s.position?' '+posShort(s.position):''}`:'— 보관함 미지정'].join(' ')
+    +(dispOf(s).k?` · 지금 ${DISP[dispOf(s).k].t}: ${[dispOf(s).ev.date,dispOf(s).ev.text].filter(Boolean).join(' ')}`:'');
 
   /* 일지 — 기록 + 동정일 + 라벨 출력을 시간순으로 합친다 */
   const tl=[];
@@ -4044,17 +4276,24 @@ $('#dl-xls').onclick=()=>{
   if(!rows.length)return say('내보낼 표본이 없습니다.','warn');
   const H=['채집번호','국명','학명','동정상태','목','과','지역','채집지','채집지(영문)','경도','위도','고도(m)',
     '채집일','종료일','채집방법','채집자','채집자(영문)','동정자','동정일','개체수','성별','보존',
-    '박스','칸','모체번호','해부','DNA','사진','실험비고','추출번호','쓴 조직','추출물 보관','마커·결과',
-    '대여중','기록수','동정비고','출력일','재출력 필요','라벨 직접수정'];
+    '박스','칸','모체번호','계보 원번호','분리한 번호','해부','DNA','사진','실험비고','추출번호','쓴 조직','추출물 보관',
+    'COI 결과','COI 번호','마커·결과(전체)',
+    '소장 상태','상태 날짜·내용','기록수','동정비고','출력일','재출력 필요','라벨 직접수정'];
   const q=v=>{v=v==null?'':String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
-  const L=[H.join(',')];
-  rows.forEach(s=>{const st=siteOf(s.site_id)||{};const lo=loanOpen(s);
+  const L=[H.join(',')], km=kidMap();
+  /* COI 줄 — 바코드 결과와 번호를 따로 열로 (GenBank 대조표용) */
+  const coi=s=>((s.dna&&Array.isArray(s.dna.seq))?s.dna.seq:[]).find(q=>/^CO(I|1)$/i.test(String(q.marker||'').trim()))||null;
+  rows.forEach(s=>{const st=siteOf(s.site_id)||{};const dp=dispOf(s);const c1=coi(s);
     L.push([s.no,s.kor,s.sci,STATUS[s.status]||'',s.order_ko||s.order_la,s.family_ko||s.family_la,st.region,st.locality_ko,
       st.locality_en,st.lon,st.lat,st.elev,s.date,s.date2,s.method,s.collector,s.collector_en,
       s.det_by,s.det_date,s.count,SEX[s.sex]||'',PRES[s.preservation]||'',s.container,s.position,
-      s.parent_no,s.exp.dissect?'Y':'',s.exp.dna?'Y':'',s.exp.photo?'Y':'',s.exp.note,
-      (s.dna&&s.dna.id)||'',TISSUE[(s.dna||{}).tissue]||'',s.dna&&s.dna.box?s.dna.box+(s.dna.pos?' '+s.dna.pos:''):'',seqTxt(s.dna),
-      lo?('Y — '+(lo.text||'')):'',userLogs(s).length||'',s.det_note,s.printed_at,needsReprint(s)?'Y':'',
+      s.parent_no,rootNo(s),(km.get(s.no)||[]).map(x=>x.no).join(' '),
+      s.exp.dissect?'Y':'',s.exp.dna?'Y':s.exp.dna_spare?'예비':'',s.exp.photo?'Y':'',s.exp.note,
+      s.exp.dna?((s.dna&&s.dna.id)||s.no):((s.dna&&s.dna.id)||''),          /* 비워 두면 채집번호가 곧 추출번호 */
+      TISSUE[(s.dna||{}).tissue]||'',s.dna&&s.dna.box?s.dna.box+(s.dna.pos?' '+s.dna.pos:''):'',
+      c1?SEQRES[c1.result||'']:'',c1?(c1.acc||''):'',seqTxt(s.dna),
+      dp.k?DISP[dp.k].t:'소장',dp.ev?[dp.ev.date,dp.ev.text].filter(Boolean).join(' '):'',
+      userLogs(s).length||'',s.det_note,s.printed_at,needsReprint(s)?'Y':'',
       Object.keys(ledit(s)).filter(k=>lhas(s,k)).map(k=>LNAME[k]+': '+ledit(s)[k]).join(' / ')].map(q).join(','));});
   download(`표본목록_${today()}.csv`,'\ufeff'+L.join('\r\n'));
   say(`${rows.length}건을 내보냈습니다 — Excel에서 바로 열립니다.`);
