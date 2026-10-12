@@ -776,12 +776,13 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
 <!-- ══ 라벨출력 ══ -->
 <section class="view" id="v-print">
   <div class="card noprint"><div class="card-b">
-    <div class="grid g4">
-      <div><label class="fl">범위 시작</label><input type="text" id="p-from" class="mono" placeholder="JH000003"></div>
-      <div><label class="fl">범위 끝</label><input type="text" id="p-to" class="mono" placeholder="JH000012 또는 12"></div>
-      <div class="rowflex" style="align-items:flex-end"><button class="btn" id="p-range">범위 추가</button></div>
-      <div class="rowflex" style="align-items:flex-end"><button class="btn" id="p-filter">표본목록 조건 전부 추가</button></div>
+    <div class="rowflex" style="gap:8px;align-items:flex-end">
+      <div class="grow" style="min-width:240px"><label class="fl">번호 — 하나씩 · 여럿 · 범위를 섞어서 (띄어쓰기나 쉼표로 구분)</label>
+        <input type="text" id="p-nos" class="mono" placeholder="예: 241 246 253 · 241-250 · JH000241~260" autocomplete="off"></div>
+      <button class="btn pri" id="p-add">추가</button>
+      <button class="btn" id="p-filter">표본목록 조건 전부 추가</button>
     </div>
+    <div class="hint" id="p-nosinfo" style="margin-top:6px">숫자만 쳐도 됩니다(241 → JH000241). 범위 끝은 줄여 써도 됩니다(241-50 → 241~250). Excel에서 번호 열을 복사해 붙여도 됩니다.</div>
   </div></div>
 
   <div class="card noprint">
@@ -1022,7 +1023,7 @@ const sciFmt=s=>esc(s)
   .replace(SCIRM,'<span class="rm">$1</span>');
 
 /* ─────── 상태 ─────── */
-const BUILD='2026-10-12 · v39';
+const BUILD='2026-10-12 · v40';
 const DB={spec:[],site:[],chk:[],cont:[]};
 const SHA={};
 let CFG={owner:'',repo:'',branch:'main',store:'local',token:'',
@@ -3040,14 +3041,69 @@ const goPrint=()=>{$$('.gnb button[data-v]').forEach(x=>x.classList.toggle('on',
 function addQ(no){const s=specOf(no);if(!s)return;
   if(queue.find(q=>q.no===no))return;
   queue.push({no, copies: s.preservation==='wet'?1:Math.max(1,s.count||1)});}
-$('#p-range').onclick=()=>{
-  const a=numOf($('#p-from').value)||0; let b=numOf($('#p-to').value)||0;
-  if(!a)return say('범위 시작을 입력하십시오.','bad');
-  if(!b)b=a;
-  if(b<a)b=a;
-  let n=0; DB.spec.forEach(s=>{const v=numOf(s.no); if(v>=a&&v<=b){addQ(s.no);n++;}});
-  renderQueue(); say(n?`${n}건 추가했습니다.`:'해당 범위에 표본이 없습니다.', n?'':'warn');
-};
+/* 번호 칸 해석 — '241 246 253', '241,246', '241-250', 'JH000241~JH000260', '241-50'(→250), 구번호(LJH045)도.
+   입력한 순서대로 대기열에 넣는다(범위 안은 번호순). 없는 번호는 따로 알려 준다. */
+function parseNos(txt){
+  const items=[], bad=[];
+  const s=String(txt||'').replace(/[，、;；|\n\r\t]/g,' ').replace(/\s*([~\-–—])\s*/g,'$1').trim();
+  if(!s)return {items,bad};
+  const leg=new Map(DB.spec.filter(x=>x.legacy_no).map(x=>[String(x.legacy_no).toUpperCase(),x.no]));
+  s.split(/[\s,]+/).filter(Boolean).forEach(tok=>{
+    const m=/^([A-Za-z]*\d+)[~\-–—]([A-Za-z]*\d+)$/.exec(tok);
+    if(m){
+      let a=numOf(m[1]), b=numOf(m[2]); const bd=m[2].replace(/\D/g,''), as=String(a);
+      if(b<a&&!/[A-Za-z]/.test(m[2])&&bd.length<as.length)b=+(as.slice(0,as.length-bd.length)+bd);   /* 241-50 → 250 */
+      if(!a||!b||b<a){bad.push(tok);return;}
+      if(b-a>5000){bad.push(tok+' (범위가 너무 큼)');return;}
+      items.push({tok,a,b}); return;
+    }
+    const L=leg.get(tok.toUpperCase()); if(L){items.push({tok,no:L}); return;}
+    const n=numOf(tok); if(n)items.push({tok,a:n,b:n}); else bad.push(tok);
+  });
+  return {items,bad};
+}
+/* 해석 결과 → 실제 번호들(입력 순서, 겹치면 한 번) + 없는 번호 */
+function resolveNos(txt){
+  const {items,bad}=parseNos(txt), nos=[], seen=new Set(), miss=[];
+  const byNum=new Map(DB.spec.map(s=>[numOf(s.no),s.no]));
+  items.forEach(it=>{
+    if(it.no){ if(!seen.has(it.no)){seen.add(it.no); nos.push(it.no);} return; }
+    if(it.a===it.b){ const no=byNum.get(it.a); if(!no){miss.push(it.tok);return;} if(!seen.has(no)){seen.add(no); nos.push(no);} return; }
+    const inR=DB.spec.filter(s=>{const v=numOf(s.no); return v>=it.a&&v<=it.b;}).map(s=>s.no).sort((x,y)=>numOf(x)-numOf(y));
+    if(!inR.length)miss.push(it.tok);
+    inR.forEach(no=>{ if(!seen.has(no)){seen.add(no); nos.push(no);} });
+  });
+  return {nos,miss,bad};
+}
+const pnHint='숫자만 쳐도 됩니다(241 → JH000241). 범위 끝은 줄여 써도 됩니다(241-50 → 241~250). Excel에서 번호 열을 복사해 붙여도 됩니다.';
+function pnPreview(){
+  const I=$('#p-nosinfo'), v=$('#p-nos').value; if(!I)return;
+  if(!v.trim()){I.textContent=pnHint; I.style.color=''; return;}
+  const r=resolveNos(v), inQ=r.nos.filter(no=>queue.some(q=>q.no===no)).length;
+  const head=r.nos.slice(0,8).join(', ')+(r.nos.length>8?` 외 ${r.nos.length-8}`:'');
+  I.textContent=(r.nos.length?`→ ${r.nos.length}건: ${head}${inQ?` (이미 대기열에 ${inQ}건)`:''}`:'→ 넣을 표본 없음')
+    +(r.miss.length?` · 없는 번호: ${r.miss.join(', ')}`:'')+(r.bad.length?` · 읽을 수 없음: ${r.bad.join(', ')}`:'');
+  I.style.color=(r.miss.length||r.bad.length)?'var(--warn)':'';
+}
+function pnAdd(){
+  const v=$('#p-nos').value; if(!v.trim())return say('번호를 넣으십시오 — 예: 241 246 253 또는 241-250','warn');
+  const r=resolveNos(v); let n=0, dup=0;
+  r.nos.forEach(no=>{ if(queue.some(q=>q.no===no)){dup++; return;} addQ(no); n++; });
+  renderQueue();
+  const tail=[dup?`이미 대기열에 있던 ${dup}건은 그대로`:'', r.miss.length?`없는 번호: ${r.miss.join(', ')}`:'', r.bad.length?`읽을 수 없음: ${r.bad.join(', ')}`:''].filter(Boolean).join(' · ');
+  say(n?`${n}건 추가했습니다${tail?' — '+tail:''}.`:`추가한 것이 없습니다${tail?' — '+tail:''}.`, (r.miss.length||r.bad.length||!n)?'warn':undefined);
+  if(!r.miss.length&&!r.bad.length)$('#p-nos').value='';      /* 다 들어갔으면 비우고, 틀린 번호가 있으면 고치도록 남긴다 */
+  pnPreview();
+}
+$('#p-add').onclick=pnAdd;
+$('#p-nos').addEventListener('input',pnPreview);
+/* Excel 열을 복사해 붙이면 줄바꿈이 섞여 온다 — 한 줄 칸에서 번호가 붙어 버리지 않게 띄어쓰기로 바꿔 넣는다 */
+$('#p-nos').addEventListener('paste',e=>{
+  const tx=(e.clipboardData||window.clipboardData||{getData:()=>''}).getData('text'); if(!tx||!/[\r\n\t]/.test(tx))return;
+  e.preventDefault(); const el=e.target, v=tx.replace(/[\r\n\t]+/g,' ').trim();
+  const a=el.selectionStart??el.value.length, b=el.selectionEnd??a, pre=el.value.slice(0,a);
+  el.value=pre+(pre&&!/\s$/.test(pre)?' ':'')+v+' '+el.value.slice(b).replace(/^\s+/,''); pnPreview();});
+$('#p-nos').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing){e.preventDefault(); pnAdd();}});
 $('#p-filter').onclick=()=>{const r=filtered();r.forEach(s=>addQ(s.no));renderQueue();
   say(`${r.length}건 추가했습니다.`);};
 $('#q-clear').onclick=()=>{queue=[];renderQueue();};
@@ -3070,7 +3126,7 @@ function renderQueue(){
         <button class="btn sm" data-u="${i}">+</button></div></td>
       <td class="c n"><button class="btn sm" data-le="${esc(s.no)}" title="이 라벨을 직접 고칩니다">✎ 수정</button>
         <button class="btn sm dgr" data-x="${i}">×</button></td></tr>`;}).join('')
-    ||`<tr><td colspan="5" style="padding:22px;text-align:center;color:var(--mut)">범위나 조건으로 표본을 추가하십시오.</td></tr>`;
+    ||`<tr><td colspan="5" style="padding:22px;text-align:center;color:var(--mut)">번호(241 246 253 · 241-250)나 조건으로 표본을 추가하십시오.</td></tr>`;
   $$('#qb [data-d]').forEach(b=>b.onclick=()=>{const q=queue[+b.dataset.d];q.copies=Math.max(1,q.copies-1);renderQueue();});
   $$('#qb [data-u]').forEach(b=>b.onclick=()=>{queue[+b.dataset.u].copies++;renderQueue();});
   $$('#qb [data-x]').forEach(b=>b.onclick=()=>{queue.splice(+b.dataset.x,1);renderQueue();});
