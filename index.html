@@ -1023,14 +1023,14 @@ const sciFmt=s=>esc(s)
   .replace(SCIRM,'<span class="rm">$1</span>');
 
 /* ─────── 상태 ─────── */
-const BUILD='2026-10-12 · v40';
+const BUILD='2026-10-12 · v41';
 const DB={spec:[],site:[],chk:[],cont:[]};
 const SHA={};
 let CFG={owner:'',repo:'',branch:'main',store:'local',token:'',
          coll:'이재호',collen:'JH Lee',prefix:'JH',inst:''};
 let dirty=false, editing=null, queue=[], selected=new Set(), boxSel=null, editLog=[];
 let formSnap=null, formFP0='', pendNote='';
-let editSN=[], snEdit=-1, snMove=[];   /* 표본의 채집지 메모(화면 상태) · 고치는 줄 · 저장 때 지점에서 뺄 예전 메모 */      /* 입력 화면을 채울 때의 기록 — 저장 전에 동기화·일괄 수정 등으로 바뀐 칸을 되돌리지 않기 위해 */
+let editSN=[], snEdit=-1, snMove=[], snLegOpen=false;   /* 표본의 채집지 메모(화면 상태) · 고치는 줄 · 저장 때 지점에서 뺄 예전 메모 */      /* 입력 화면을 채울 때의 기록 — 저장 전에 동기화·일괄 수정 등으로 바뀐 칸을 되돌리지 않기 위해 */
 
 const PATH={spec:'data/specimens.jsonl',site:'data/sites.jsonl',cont:'data/containers.jsonl',chk:'data/checklist.jsonl'};
 const PRES={wet:'액침',dry:'건조'};
@@ -1875,15 +1875,45 @@ function newSiteMode(){
   setTimeout(()=>$('#s-ko').focus(),0);
 }
 $('#site-new').onmousedown=e=>{e.preventDefault();newSiteMode();};
-$('#site-unk').onmousedown=e=>{e.preventDefault(); pickSite(ensureUnknownSite());
-  say('채집지 미상으로 두었습니다 — 라벨 채집지 줄에는 Locality unknown 이 찍히고 나라·좌표는 비웁니다. 나중에 알게 되면 지점을 바꾸십시오.');};
+$('#site-unk').onmousedown=e=>{e.preventDefault(); closeSitePick(); openUnknownPicker();};
 function nextSiteId(){return 'S'+String(DB.site.reduce((m,s)=>Math.max(m,+String(s.site_id).replace(/\D/g,'')||0),0)+1).padStart(3,'0');}
-/* '채집지 미상' 지점 — 하나만 만들어 함께 쓴다. 좌표 없음, 라벨엔 번호와 Locality unknown */
-function ensureUnknownSite(){
-  let st=DB.site.find(s=>s.unknown);
-  if(!st){st={site_id:nextSiteId(),region:'',locality_ko:'채집지 미상',locality_en:'',lon:null,lat:null,elev:null,
-    note:'받은 표본 등 채집지를 알 수 없는 표본',unknown:true}; DB.site.push(st); mark(true);}
-  return st.site_id;
+/* ─── 채집지 미상 — 묶음마다 따로 둘 수 있다 (v41) ───
+   받은 표본은 묶음마다 출처가 다르다. '채집지 미상 A · B …'(또는 이름을 붙여)를 따로 두고 골라 쓴다.
+   라벨은 모두 Locality unknown, 좌표 없음. 이름·설명은 그 묶음에만, 표본마다의 메모는 표본의 채집지 메모에. */
+const unkSites=()=>DB.site.filter(s=>s.unknown);
+function nextUnkName(){
+  const used=new Set(DB.site.map(s=>String(s.locality_ko||'').trim()));
+  for(let r=1;r<50;r++)for(const c of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'){const n=`채집지 미상 ${c}${r>1?r:''}`; if(!used.has(n))return n;}
+  return `채집지 미상 ${Date.now()}`;
+}
+function makeUnknownSite(name,desc){
+  const st={site_id:nextSiteId(),region:'',locality_ko:name||nextUnkName(),locality_en:'',lon:null,lat:null,elev:null,note:desc||'',unknown:true};
+  DB.site.push(st); mark(true); return st.site_id;
+}
+function ensureUnknownSite(){const u=unkSites(); return u.length?u[0].site_id:makeUnknownSite('','받은 표본 등 채집지를 알 수 없는 표본');}
+function openUnknownPicker(){
+  const U=unkSites(), use=siteUse(), cur=$('#e-site').value, nn=nextUnkName();
+  openModal({title:'채집지 미상 — 어느 묶음인가요',body:`
+    <p class="hint" style="margin-bottom:10px">채집지를 모르는 표본도 출처가 서로 다를 수 있습니다. <b>같은 곳에서 온 묶음이면 같은 미상 지점</b>을, 따로 온 것이면 새로 만드십시오.
+      라벨에는 모두 <b>Locality unknown</b>으로 찍힙니다. 표본마다의 메모는 표본입력의 채집지 메모 칸에 따로 적습니다.</p>
+    ${U.length?`<div class="tbl-wrap"><table><tbody>${U.map(st=>`<tr>
+      <td><b>${esc(st.locality_ko||st.site_id)}</b> <span class="hint mono">${esc(st.site_id)}</span>${st.note?`<div class="hint">${esc(st.note)}</div>`:''}</td>
+      <td class="c mono n">${use.n.get(st.site_id)||0}건</td>
+      <td class="c n" style="width:1%"><button class="btn sm ${st.site_id===cur?'':'pri'}" data-unk="${esc(st.site_id)}">${st.site_id===cur?'지금 고른 것':'이것으로'}</button></td></tr>`).join('')}</tbody></table></div>`:''}
+    <div class="msec" style="margin-top:12px">새 채집지 미상</div>
+    <div class="grid g2" style="gap:8px">
+      <div><label class="fl">이름 — 비우면 ${esc(nn)}</label><input type="text" id="un-name" placeholder="예: 김OO 기증분 · 2017 제주 추정"></div>
+      <div><label class="fl">설명 — 이 묶음 공통 (받은 경위 등)</label><input type="text" id="un-desc" placeholder="예: 2026-10 김OO 박사에게서, 라벨에 KOREA만"></div></div>
+    <div class="rowflex" style="margin-top:8px"><div class="grow"></div><button class="btn pri" id="un-make">새로 만들어 고르기</button></div>`});
+  $$('#mbody [data-unk]').forEach(b=>b.onclick=()=>{const id=b.dataset.unk; closeModal(true); pickSite(id);
+    say(`${siteText(siteOf(id))}에 두었습니다 — 라벨 채집지 줄에는 Locality unknown 이 찍히고 나라·좌표는 비웁니다.`);});
+  $('#un-make').onclick=()=>{
+    let nm=$('#un-name').value.trim().replace(/\s+/g,' '); const ds=$('#un-desc').value.trim();
+    if(nm&&!/미상/.test(nm))nm='채집지 미상 · '+nm;
+    if(nm&&DB.site.some(s=>String(s.locality_ko||'').trim()===nm))return say('같은 이름의 지점이 이미 있습니다 — 다른 이름을 붙이십시오.','warn');
+    const id=makeUnknownSite(nm,ds); closeModal(true); pickSite(id);
+    say(`${jUl(siteText(siteOf(id)))} 새로 만들어 골랐습니다 — 같은 묶음의 다음 표본에서도 이것을 고르십시오.`);
+  };
 }
 
 /* 표본 기록 시 새 지점을 함께 저장 — 별도 지점 등록 절차 없음 */
@@ -2033,12 +2063,15 @@ function renderSNLegacy(){
   if(!L.length||snapMode){B.innerHTML='';return;}
   const n=siteSpecs(st.site_id).length;
   B.innerHTML=`<div class="warnbox" style="margin-top:8px;font-size:12.5px;line-height:1.6">
-    <b>예전 방식 메모 ${L.length}건</b> — 지점 ${esc(st.site_id)}${st.unknown?' (채집지 미상)':''}에 적혀 있어 이 지점을 쓰는 표본 ${n}건 모두에 보이던 것입니다.
-    이 표본 것이면 <b>옮기기</b>(저장하면 지점에서 빠지고 이 표본에만 남음), 여러 표본에 해당하면 <b>복사</b>한 뒤 지점 카드에서 지우십시오.
+    지점 ${esc(st.site_id)}에 <b>예전 방식 메모 ${L.length}건</b>이 남아 있습니다 — 이 표본의 메모가 아니라, 예전에 지점에 적어 그 지점 표본 ${n}건 모두에 보이던 것입니다.
+    <a class="lnk" id="e-snlegtg">${snLegOpen?'접기':'보기 · 이 표본으로 옮기기'}</a>
+    <div style="display:${snLegOpen?'':'none'}">
+    <div style="margin-top:4px">이 표본 것이면 <b>옮기기</b>(저장하면 지점에서 빠지고 이 표본에만 남음), 여러 표본에 해당하면 <b>복사</b>한 뒤 지점 카드에서 지우십시오.</div>
     <div class="tbl-wrap" style="margin-top:6px;background:var(--canvas);color:var(--fg)"><table><tbody>${L.map((x,i)=>`<tr>
       <td class="mono c n" style="width:92px;vertical-align:top">${esc(x.date||'')}</td>
       <td><div style="white-space:pre-wrap">${esc(x.text||'')}</div>
-        <div class="rowflex" style="gap:6px;margin-top:5px"><button type="button" class="btn sm pri" data-snmv="${i}">이 표본으로 옮기기</button><button type="button" class="btn sm" data-sncp="${i}">복사</button></div></td></tr>`).join('')}</tbody></table></div></div>`;
+        <div class="rowflex" style="gap:6px;margin-top:5px"><button type="button" class="btn sm pri" data-snmv="${i}">이 표본으로 옮기기</button><button type="button" class="btn sm" data-sncp="${i}">복사</button></div></td></tr>`).join('')}</tbody></table></div></div></div>`;
+  $('#e-snlegtg').onclick=()=>{snLegOpen=!snLegOpen; renderSNLegacy();};
   const has=x=>editSN.some(e=>String(e.date||'')===String(x.date||'')&&String(e.text||'')===String(x.text||''));
   $$('#e-snlegacy [data-snmv]').forEach(b=>b.onclick=()=>{const x=L[+b.dataset.snmv]; if(!x)return;
     if(!has(x))editSN.push({date:x.date||today(),text:x.text||''}); snSort(editSN);
@@ -2195,7 +2228,7 @@ function fillEntry(no){
   dnaFill(s);
   editLog=s?JSON.parse(JSON.stringify(s.log||[])):[];
   $('#lg-date').value=today(); renderLog();
-  editSN=s?JSON.parse(JSON.stringify(specNotes(s))):[]; snEdit=-1; snMove=[];
+  editSN=s?JSON.parse(JSON.stringify(specNotes(s))):[]; snEdit=-1; snMove=[]; snLegOpen=false;
   $('#e-sndate').value=today(); $('#e-sntext').value=''; renderSN();
   v('#e-search',''); closeAC();
   delete $('#e-collen').dataset.touched; delete $('#e-deten').dataset.touched;
@@ -2382,9 +2415,13 @@ $('#e-next').onclick=()=>{
   $('#x-gen').value=''; genUI(); dnaFill(null);
   setStatus('');
   editLog=[]; renderLog(); closeAC();
+  /* 채집지 메모는 표본마다 — 다음 표본으로 끌고 가지 않는다(v40 까지는 이어서 입력한 표본 모두에 같은 메모가 붙었다) */
+  editSN=[]; snEdit=-1; snMove=[]; snLegOpen=false; $('#e-sntext').value=''; $('#e-sndate').value=today(); renderSN();
+  formSnap=null;
   $('#e-flags').innerHTML='<span class="hint">종을 고르면 표시됩니다</span>';
   detOptions(CFG.coll);
   contChanged();
+  formFP0=formFP();
   $('#e-search').focus();
   say(`${rec.no} 저장됨 — 같은 채집정보로 이어서 입력합니다. 종명부터 치면 됩니다.`);
 };
@@ -3694,7 +3731,7 @@ function openMapPicker(o){
   MP={o, map:null, mk:null, circ:null, addr:null, useAddr:false, revSeq:0, elevSeq:0, res:[]};
   openModal({wide:true, stack:!!o.stack, title:o.title||'지도에서 찾기',
     body:`<div class="rowflex" style="gap:6px;flex-wrap:nowrap">
-        <input type="text" id="mp-q" placeholder="주소·지명 검색 — 예: 공주시 신풍면 봉갑리 · 계룡산 · 제주시" autocomplete="off">
+        <input type="text" id="mp-q" placeholder="주소 · 지명 · 내 지점 · 좌표 — 예: 봉갑리 · 계룡산 · 36.5194, 126.8939" autocomplete="off">
         <button class="btn" id="mp-go">검색</button><button class="btn" id="mp-me" title="이 기기의 현재 위치(휴대폰 GPS)">내 위치</button></div>
       <div class="ac-list" id="mp-res"></div>
       <div id="mp-map"></div>
@@ -3822,17 +3859,72 @@ function mpNear(lat,lon){
     +`<br><span class="hint">같은 곳이면 새 지점을 만들지 말고 기존 지점을 쓰십시오.</span></div>`:'';
   $$('#mp-near [data-mpsite]').forEach(b=>b.onclick=()=>{const cb=MP.o.onPickSite, id=b.dataset.mpsite; closeModal(true); cb(id);});
 }
+/* ─── 주소 검색 보강 (v41) ───
+   OpenStreetMap(Nominatim)은 한국 주소의 번지·도 약칭(충남)·도로명 번호에 약해 '찾지 못함'이 잦다.
+   ① 좌표를 그대로 넣었으면 바로 그 자리 ② 내 지점에서 먼저 ③ 번지를 떼고 도 이름을 풀어 찾고, 없으면
+   도 이름 뺀 것 → 리+시군 → 끝 두 낱말 → 끝 낱말 순으로 줄여 다시 찾는다(1초에 한 번). 지금 보는 지도 둘레를 먼저. */
+function parseCoordQ(q){
+  q=String(q||'').trim(); if(!q)return null;
+  let la=null, lo=null;
+  if(/[°º˚]/.test(q)){                                      /* 36°31'09.8"N 126°53'38.0"E */
+    const P=String.raw`(\d{1,3})\s*[°º˚]\s*(?:(\d{1,2})\s*['′’]\s*)?(?:(\d{1,2}(?:\.\d+)?)\s*(?:["″”]|'')\s*)?([NSEW])?`;
+    const m=new RegExp(P+String.raw`[\s,;/]*`+P,'i').exec(q); if(!m)return null;
+    const dd=(d,mi,s)=>(+d)+(+mi||0)/60+(+s||0)/3600;
+    let x=dd(m[1],m[2],m[3]), y=dd(m[5],m[6],m[7]);
+    if(/[SW]/i.test(m[4]||''))x=-x; if(/[SW]/i.test(m[8]||''))y=-y;
+    if(/[EW]/i.test(m[4]||'')||/[NS]/i.test(m[8]||'')){la=y; lo=x;} else {la=x; lo=y;}
+  }else{                                                     /* 36.5194, 126.8939 · 126.8939 36.5194 · N36.5 E126.8 */
+    if(!/^[\sNSEWnsew.,;:/+\-\d]+$/.test(q)||!q.includes('.'))return null;
+    const n=(q.match(/-?\d+(?:\.\d+)?/g)||[]).map(Number); if(n.length!==2)return null;
+    [la,lo]=n;
+  }
+  const inLa=v=>v>=32&&v<=39.5, inLo=v=>v>=123&&v<=133;
+  if(!(inLa(la)&&inLo(lo))&&inLa(lo)&&inLo(la)){const z=la; la=lo; lo=z;}    /* 경도, 위도 순으로 쳤으면 바꾼다 */
+  if(!isFinite(la)||!isFinite(lo)||Math.abs(la)>90||Math.abs(lo)>180)return null;
+  return {lat:+la.toFixed(6), lon:+lo.toFixed(6)};
+}
+const isLotTok=w=>/^(산)?\d+([-~]\d+)*(번지|호)?$/.test(w)||/^(일원|일대|부근|근처|인근|주변|일부)$/.test(w);
+function mpLocal(q){
+  const toks=String(q||'').trim().split(/\s+/).filter(w=>w&&!isLotTok(w)).map(sNorm);
+  if(!toks.length)return [];
+  return DB.site.filter(st=>st.lon!=null&&st.lat!=null&&(!MP||st.site_id!==MP.o.siteId)).filter(st=>{
+    const h=sNorm([st.site_id,st.region,PROVFULL[st.region]||'',st.locality_ko,st.locality_en,st.note].join(' '));
+    return toks.every(w=>h.includes(w));}).slice(0,6);
+}
+function mpQueries(q){
+  let t=String(q||'').replace(/[(),·\[\]]/g,' ').replace(/\s+/g,' ').trim().split(' ').filter(Boolean);
+  t=t.map(w=>w.replace(/^([가-힣]+[리동로길])(산)?\d+([-~]\d+)*(번지)?$/,'$1')).filter(w=>!isLotTok(w));
+  if(t.length&&PROVFULL[t[0]])t[0]=PROVFULL[t[0]];               /* 충남 → 충청남도 */
+  const out=[], add=a=>{const s=a.filter(Boolean).join(' '); if(s&&!out.includes(s))out.push(s);};
+  add(t);
+  const body=t.length>=2&&shortProv(t[0])?t.slice(1):t;
+  add(body);                                                      /* 도 이름 뺀 것 */
+  const last=body[body.length-1], city=body.find(w=>/[시군]$/.test(w)&&w!==last);
+  if(body.length>=2&&city)add([last,city]);                       /* 리 + 시군 (같은 이름이 여러 곳일 때) */
+  if(body.length>=3)add(body.slice(-2));                          /* 끝의 두 낱말 */
+  if(body.length>=2&&String(last).length>=3)add([last]);          /* 끝 낱말 — '계곡'처럼 짧은 보통명사만 남으면 안 찾는다 */
+  return out.slice(0,5);
+}
+const roOf=w=>jRo(w).slice(w.length);                            /* ‘…’로 / ‘…’으로 */
 async function mpSearch(){
   const q=$('#mp-q').value.trim(); if(!q||!MP)return;
-  const R=$('#mp-res'); R.innerHTML='<div class="ac-item"><span class="m">찾는 중…</span></div>'; R.classList.add('on');
-  try{
-    const j=await mpFetch(`${NOMI}/search?format=jsonv2&q=${encodeURIComponent(q)}&countrycodes=kr&accept-language=ko&limit=6&addressdetails=1`);
-    if(!MP)return;
-    if(!j.length){R.innerHTML='<div class="ac-item"><span class="m">찾지 못했습니다 — 시·군·읍·면 같은 더 큰 지명으로 찾거나 지도를 직접 움직이십시오.</span></div>';return;}
-    MP.res=j;
-    const span=x=>{const b=(x.boundingbox||[]).map(Number); return b.length===4?distM(b[0],b[2],b[1],b[3])/2:0;};
-    R.innerHTML=j.map((x,i)=>`<div class="ac-item" data-mr="${i}"><b>${esc(x.name||String(x.display_name).split(',')[0])}</b>
-      <span class="m">${esc(x.display_name)}</span>${span(x)>700?`<button class="btn sm" data-mra="${i}" title="그 지역의 중심과 반경으로 넣습니다 — 받은 표본처럼 지역만 알 때">이 지역 전체 (대략)</button>`:''}</div>`).join('');
+  const R=$('#mp-res'); R.classList.add('on');
+  /* ① 좌표 */
+  const c=parseCoordQ(q);
+  if(c){ R.classList.remove('on'); R.innerHTML=''; MP.map.setView([c.lat,c.lon],16); mpSet(c.lat,c.lon,{});
+    $('#mp-info').textContent=`좌표 ${c.lat}, ${c.lon}`; return; }
+  /* ② 내 지점 */
+  const loc=mpLocal(q);
+  const locHTML=loc.length?`<div class="ac-item" style="cursor:default;background:var(--subtle)"><span class="m">내 지점 — 누르면 그 자리로</span></div>`
+    +loc.map((st,i)=>`<div class="ac-item" data-ml="${i}"><b><span class="mono">${esc(st.site_id)}</span> ${esc(siteText(st))}</b>
+      <span class="m">${esc(fmt6(st.lat))}, ${esc(fmt6(st.lon))}${st.coord_src?' · '+esc(CSRC[st.coord_src]||''):''}${st.unc?' ±'+esc(fmtUnc(st.unc)):''}</span></div>`).join(''):'';
+  const show=extra=>{ if(!MP)return; R.innerHTML=locHTML+extra; wire(); };
+  const wire=()=>{
+    $$('#mp-res [data-ml]').forEach(d=>d.onclick=()=>{const st=loc[+d.dataset.ml]; if(!st)return; R.classList.remove('on');
+      MP.map.setView([+st.lat,+st.lon],Math.max(MP.map.getZoom(),15));
+      if(st.coord_src)$('#mp-csrc').value=st.coord_src;
+      mpSet(+st.lat,+st.lon,{unc:st.unc??undefined,noElev:st.elev!=null,addr:{ko:String(st.locality_ko||''),region:shortProv(st.region)||koRegion(st.locality_ko)}});
+      if(st.elev!=null)$('#mp-elev').value=st.elev;});
     $$('#mp-res [data-mr]').forEach(d=>d.onclick=e=>{
       if(e.target.closest('[data-mra]'))return;
       const x=MP.res[+d.dataset.mr]; R.classList.remove('on');
@@ -3848,7 +3940,32 @@ async function mpSearch(){
       const u=Math.round(span(x)/10)*10;
       setTimeout(()=>{mpSet(+x.lat,+x.lon,{unc:u,noElev:true,addr:koAddr(x.address),forceAddr:true}); $('#mp-elev').value='';},60);
     });
-  }catch(e){ R.innerHTML='<div class="ac-item"><span class="m">주소 검색이 막혔습니다(인터넷 · 회사망 확인) — 지도를 직접 움직여 찾으십시오.</span></div>'; }
+  };
+  const span=x=>{const b=(x.boundingbox||[]).map(Number); return b.length===4?distM(b[0],b[2],b[1],b[3])/2:0;};
+  /* ③ OpenStreetMap — 줄여 가며 */
+  const qs=mpQueries(q);
+  if(!qs.length){show('<div class="ac-item"><span class="m">검색어를 알아볼 수 없습니다 — 지명이나 좌표를 넣으십시오.</span></div>');return;}
+  const z=MP.map.getZoom(), bd=MP.map.getBounds();
+  const vb=z>=9?`&viewbox=${bd.getWest().toFixed(4)},${bd.getNorth().toFixed(4)},${bd.getEast().toFixed(4)},${bd.getSouth().toFixed(4)}&bounded=0`:'';
+  let j=[], used='';
+  show(`<div class="ac-item"><span class="m">주소 찾는 중… ‘${esc(qs[0])}’</span></div>`);
+  try{
+    for(let i=0;i<qs.length;i++){
+      if(!MP)return;
+      if(i)show(`<div class="ac-item"><span class="m">‘${esc(qs[i-1])}’${roOf(qs[i-1])}는 없어 ‘${esc(qs[i])}’${roOf(qs[i])} 다시 찾는 중… (${i+1}/${qs.length})</span></div>`);
+      j=await mpFetch(`${NOMI}/search?format=jsonv2&q=${encodeURIComponent(qs[i])}&countrycodes=kr&accept-language=ko&limit=8&addressdetails=1${vb}`);
+      if(Array.isArray(j)&&j.length){used=qs[i]; break;}
+    }
+  }catch(e){ show('<div class="ac-item"><span class="m">주소 검색이 막혔습니다(인터넷 · 회사망 확인) — 내 지점이나 좌표(36.5194, 126.8939)로 찾거나 지도를 직접 움직이십시오.</span></div>'); return; }
+  if(!MP)return;
+  if(!Array.isArray(j)||!j.length){
+    show(`<div class="ac-item"><span class="m">찾지 못했습니다 (${qs.map(x=>'‘'+esc(x)+'’').join(' → ')}). 읍·면·리 이름만(예: 봉갑리), 산·계곡 이름,
+      또는 GPS 좌표(36.5194, 126.8939 · 36°31'10"N 126°53'38"E)를 넣어 보십시오. 지도를 직접 움직여 눌러도 됩니다.</span></div>`);
+    return; }
+  MP.res=j;
+  const note=used!==qs[0]?`<div class="ac-item" style="cursor:default"><span class="m">‘${esc(qs[0])}’${roOf(qs[0])}는 찾지 못해 ‘${esc(used)}’${roOf(used)} 찾았습니다 — 같은 이름이 여러 곳이면 시 · 군을 보고 고르십시오.</span></div>`:'';
+  show(note+j.map((x,i)=>`<div class="ac-item" data-mr="${i}"><b>${esc(x.name||String(x.display_name).split(',')[0])}</b>
+    <span class="m">${esc(x.display_name)}</span>${span(x)>700?`<button class="btn sm" data-mra="${i}" title="그 지역의 중심과 반경으로 넣습니다 — 받은 표본처럼 지역만 알 때">이 지역 전체 (대략)</button>`:''}</div>`).join(''));
 }
 
 /* ═══════════ 채집지점 카드 — 지점 정보 고치기 ═══════════
@@ -3952,10 +4069,10 @@ function afterSiteChange(){
   if($('#v-print').classList.contains('on'))renderQueue();
 }
 
-let scId=null, scEdit=-1, scWarned=false;
+let scId=null, scEdit=-1, scWarned=false, scConv=false;
 function openSiteCard(id){
   const st=siteOf(id); if(!st)return say('지점을 찾을 수 없습니다.','warn');
-  scId=id; scEdit=-1; scWarned=false;
+  scId=id; scEdit=-1; scWarned=false; scConv=false;
   openModal({title:'',body:'<div id="sc"></div>',wide:true,beforeClose:scBeforeClose});
   paintSiteCard();
 }
@@ -3965,6 +4082,7 @@ function scFormVals(){return {region:$('#sc-region').value, locality_ko:$('#sc-k
   coord_src:$('#sc-csrc').value, unc:intOrNull($('#sc-unc').value)};}
 function scChanged(){
   const st=siteOf(scId); if(!st||!$('#sc-ko')||snapMode)return false;
+  if(!$('#sc-region'))return $('#sc-ko').value.trim()!==String(st.locality_ko||'').trim()||$('#sc-note').value.trim()!==String(st.note||'').trim();
   const v=scFormVals();
   const cur={region:String(st.region||''),locality_ko:String(st.locality_ko||'').trim(),
     locality_en:String(st.locality_en||'').trim(),lon:round6(st.lon),lat:round6(st.lat),
@@ -3990,7 +4108,8 @@ function paintSiteCard(){
   const sp=new Map(); specs.forEach(s=>{const k=s.kor||s.sci||'(미동정)';sp.set(k,(sp.get(k)||0)+(s.count||0));});
   const spl=[...sp.entries()].sort((a,b)=>b[1]-a[1]);
   const regOpts=['',...REGIONS,...(st.region&&!REGIONS.includes(st.region)?[st.region]:[])];
-  const roI=ro||!!st.unknown;                     /* 채집지 미상 — 여러 표본이 함께 쓰는 자리라 고치지 못하게 */
+  const unk=!!st.unknown&&!scConv;                /* 채집지 미상 묶음 — 이름·설명만 */
+  const roI=ro||unk;
   const RO=roI?'readonly':'';
   B.innerHTML=`
   ${iss.length?`<div class="${iss.some(x=>x.lvl==='bad')?'badbox':'warnbox'}" style="margin-bottom:14px">
@@ -4012,17 +4131,26 @@ function paintSiteCard(){
       </div>
     </div>
     <div>
-      <div class="msec">지점 정보 <span class="hint" style="font-weight:400">${st.unknown?'고칠 수 없음':`고치면 이 지점 표본 ${specs.length}건의 라벨이 함께 바뀝니다`}</span></div>
-      ${st.unknown?`<div class="warnbox" style="margin-bottom:10px;font-size:12.5px">채집지 미상은 채집지를 모르는 표본${specs.length?` ${specs.length}건`:''}이 <b>함께 쓰는 자리</b>입니다. 여기서 주소 · 좌표를 고치면
-        그 표본 모두가 바뀌므로 고칠 수 없게 했습니다. 채집지를 알게 된 표본은 표본입력에서 그 표본의 <b>채집지점을 바꾸십시오</b>(새 지점 · 지도에서 찾기 · 이 지역 전체(대략)).</div>`:''}
+      ${unk?`<div class="msec">채집지 미상 묶음 <span class="hint" style="font-weight:400">라벨에는 Locality unknown · 좌표 없음</span></div>
+      <p class="hint" style="margin-bottom:8px">채집지를 모르는 표본 ${specs.length}건을 묶어 두는 자리입니다. 출처가 다른 묶음은 따로 만드십시오(표본입력 → 지점 칸 → 채집지 미상 → 새 채집지 미상).
+        이름 · 설명은 이 묶음에만 해당하고, 표본마다의 메모는 표본입력의 채집지 메모 칸에 적습니다.</p>
+      <div><label class="fl">이름 — 목록 · 검색에 보이는 이름</label><input type="text" id="sc-ko" value="${esc(st.locality_ko||'')}" ${ro?'readonly':''}></div>
+      <div style="margin-top:10px"><label class="fl">설명 — 이 묶음 공통 (받은 경위 · 출처 추정)</label><input type="text" id="sc-note" value="${esc(st.note||'')}" ${ro?'readonly':''}></div>
+      ${ro?'':`<div class="rowflex" style="margin-top:12px"><span class="hint" id="sc-dirty"></span><div class="grow"></div><button class="btn pri" id="sc-save">정보 저장</button></div>
+      <div class="msec" style="margin-top:16px">채집지를 알게 됐으면</div>
+      <p class="hint" style="margin-bottom:8px">이 묶음 전체가 한 곳에서 온 것으로 밝혀졌으면 실제 지점으로 바꾸십시오 — 표본 ${specs.length}건의 라벨이 모두 그 채집지로 찍힙니다.
+        일부만 알게 됐으면 그 표본만 표본입력이나 일괄 수정에서 다른 지점으로 옮기십시오.</p>
+      <button class="btn" id="sc-conv">이 묶음을 실제 지점으로 바꾸기</button>`}`:`
+      <div class="msec">지점 정보 <span class="hint" style="font-weight:400">${scConv?`실제 지점으로 바꾸는 중 — 저장하면 이 묶음 표본 ${specs.length}건이 모두 이 채집지가 됩니다`:`고치면 이 지점 표본 ${specs.length}건의 라벨이 함께 바뀝니다`}</span></div>
+      ${scConv?`<div class="warnbox" style="margin-bottom:10px;font-size:12.5px">채집지 미상 묶음을 실제 지점으로 바꿉니다 — 한글 주소를 넣거나 <b>지도에서 찾기</b>로 고른 뒤 [정보 저장]을 누르십시오. <a class="lnk" id="sc-convx">그만두기</a></div>`:''}
       <div class="grid g2" style="gap:10px">
         <div><label class="fl">지역 (라벨 약호)</label><select id="sc-region" ${roI?'disabled':''}>${regOpts.map(r=>
           `<option value="${esc(r)}" ${String(st.region||'')===r?'selected':''}>${r?esc(r):'— 선택 —'}</option>`).join('')}</select></div>
         <div><label class="fl">라벨 머리줄</label><div class="mono" id="sc-rcode" style="padding:6px 2px">KOREA ${esc(rcode(st.region)||'—')}</div></div>
       </div>
-      <div style="margin-top:10px"><label class="fl">채집지 (한글)</label><input type="text" id="sc-ko" value="${esc(st.locality_ko||'')}" ${RO}></div>
+      <div style="margin-top:10px"><label class="fl">채집지 (한글)</label><input type="text" id="sc-ko" value="${esc(scConv?'':(st.locality_ko||''))}" ${RO}></div>
       <div style="margin-top:10px"><label class="fl">영문 표기 — 라벨에 이대로 찍힙니다</label>
-        <div class="rowflex" style="gap:6px;flex-wrap:nowrap"><input type="text" id="sc-en" value="${esc(st.locality_en||'')}" ${RO}>
+        <div class="rowflex" style="gap:6px;flex-wrap:nowrap"><input type="text" id="sc-en" value="${esc(scConv?'':(st.locality_en||''))}" ${RO}>
         ${roI?'':'<button class="btn" id="sc-en-auto" title="한글 주소에서 다시 만듭니다">자동</button>'}</div></div>
       <div class="grid g3" style="margin-top:10px;gap:10px">
         <div><label class="fl">경도</label><input type="text" id="sc-lon" class="mono" value="${esc(fmt6(st.lon))}" ${RO}></div>
@@ -4039,7 +4167,7 @@ function paintSiteCard(){
       <div style="margin-top:10px"><label class="fl">지점 설명 — 이 지점을 쓰는 모든 표본에 보입니다(접근로 · 지형). 채집 메모는 표본마다</label>
         <input type="text" id="sc-note" value="${esc(st.note||'')}" ${RO}></div>
       ${roI?'':`<div class="rowflex" style="margin-top:12px"><span class="hint" id="sc-dirty"></span><div class="grow"></div>
-        <button class="btn pri" id="sc-save">정보 저장</button></div>`}
+        <button class="btn pri" id="sc-save">정보 저장</button></div>`}`}
     </div>
   </div>`;
   paintScNotes();
@@ -4051,7 +4179,23 @@ function paintSiteCard(){
   const leave=fn=>()=>{ if(closeModal())fn(); };
   if($('#sc-tolist'))$('#sc-tolist').onclick=leave(()=>{ $('#q').value=st.locality_ko||st.site_id; go('list'); filterChanged(); });
   if($('#sc-tomap'))$('#sc-tomap').onclick=leave(()=>go('map',st.site_id));
-  if(roI)return;
+  if(ro)return;
+  if(unk){                                         /* 채집지 미상 묶음 — 이름·설명 고치기, 실제 지점으로 바꾸기 */
+    const dirtU=()=>{const d=scChanged(); $('#sc-dirty').textContent=d?'저장하지 않은 변경이 있습니다':''; $('#sc-dirty').style.color=d?'var(--warn)':'';};
+    ['#sc-ko','#sc-note'].forEach(x=>$(x).addEventListener('input',dirtU));
+    $('#sc-save').onclick=async()=>{
+      let nm=$('#sc-ko').value.trim().replace(/\s+/g,' '); const ds=$('#sc-note').value.trim();
+      if(!nm)return say('이름은 비울 수 없습니다.','bad');
+      if(!/미상/.test(nm))nm='채집지 미상 · '+nm;
+      if(DB.site.some(x=>x.site_id!==st.site_id&&String(x.locality_ko||'').trim()===nm))return say('같은 이름의 지점이 이미 있습니다 — 다른 이름을 붙이십시오.','warn');
+      if(nm===String(st.locality_ko||'').trim()&&ds===String(st.note||'').trim())return say('바뀐 것이 없습니다.');
+      await siteApply(()=>{st.locality_ko=nm; st.note=ds;},'채집지 미상 이름 수정 직전');
+      scWarned=false; paintSiteCard(); say(`${st.site_id} 이름 · 설명을 고쳤습니다 — 라벨은 그대로 Locality unknown 입니다. 확인 후 동기화하십시오.`);
+    };
+    $('#sc-conv').onclick=()=>{scConv=true; scWarned=false; paintSiteCard();};
+    return;
+  }
+  if($('#sc-convx'))$('#sc-convx').onclick=()=>{scConv=false; scWarned=false; paintSiteCard();};
   const dirt=()=>{const d=scChanged(); $('#sc-dirty').textContent=d?'저장하지 않은 변경이 있습니다':''; $('#sc-dirty').style.color=d?'var(--warn)':'';};
   ['#sc-region','#sc-ko','#sc-en','#sc-lon','#sc-lat','#sc-elev','#sc-note','#sc-csrc','#sc-unc'].forEach(x=>{
     $(x).addEventListener('input',dirt); $(x).addEventListener('change',dirt);});
@@ -4087,10 +4231,13 @@ function paintSiteCard(){
     if(!v.locality_ko)return say('한글 주소는 비울 수 없습니다.','bad');
     const dup=DB.site.find(x=>x.site_id!==st.site_id&&String(x.locality_ko||'').trim()===v.locality_ko);
     if(dup)return say(`같은 주소의 지점이 이미 있습니다 — ${dup.site_id}. 주소를 조금 다르게 적거나 그 지점을 쓰십시오.`,'warn');
+    if(scConv&&/채집지\s*미상/.test(v.locality_ko))return say('실제 채집지 주소를 넣으십시오 — 지도에서 찾기로 고를 수 있습니다.','bad');
     if(!scChanged())return say('바뀐 것이 없습니다.');
-    await siteApply(()=>Object.assign(st,v),'지점 정보 수정 직전');
-    scWarned=false; paintSiteCard();
-    say(`${st.site_id} 지점 정보를 고쳤습니다 — 이 지점 표본 ${specs.length}건의 라벨에 반영됩니다. 확인 후 동기화하십시오.`,'warn');
+    const conv=scConv;
+    await siteApply(()=>{Object.assign(st,v); if(conv)delete st.unknown;},conv?'채집지 미상 → 실제 지점 직전':'지점 정보 수정 직전');
+    scConv=false; scWarned=false; paintSiteCard();
+    say(conv?`${st.site_id} 채집지 미상 묶음을 실제 지점으로 바꿨습니다 — 표본 ${specs.length}건의 라벨에 반영됩니다. 확인 후 동기화하십시오.`
+      :`${st.site_id} 지점 정보를 고쳤습니다 — 이 지점 표본 ${specs.length}건의 라벨에 반영됩니다. 확인 후 동기화하십시오.`,'warn');
   };
 }
 function afterSiteNote(){ renderSiteList(); siteChanged(); if($('#v-list').classList.contains('on'))renderList(); }
@@ -4383,6 +4530,16 @@ function runChecks(){
       '이제 채집지 메모는 표본마다 따로 적습니다. 예전에 지점에 적은 메모는 지우지 않고 남겨 두었는데, 그 지점을 쓰는 표본 모두에 보이던 것입니다. 해당 표본을 열어 [이 표본으로 옮기기](여러 표본이면 [복사])를 누르고, 다 옮겼으면 지점 카드에서 지우십시오.')
       .items.push({site:st.site_id, text:`${st.site_id} ${siteText(st)} — 메모 ${L.length}건 · 표본 ${n}건에 보이던 것: ${L.slice(0,2).map(x=>x.text).join(' / ')}${L.length>2?' …':''}`,
         act:()=>openSiteCard(st.site_id), actLabel:'지점 카드'}); });
+  /* 6-5. 같은 채집지 메모가 여러 번호에 똑같이 — v39~v40 의 '저장 후 이어서'가 앞 표본의 메모를 넘겨 붙였을 수 있다 */
+  const md=new Map();
+  DB.spec.forEach(s=>{const L=specNotes(s); if(!L.length)return; const k=jsig(L), a=md.get(k)||[]; a.push(s); md.set(k,a);});
+  md.forEach(a=>{ if(a.length<2)return;
+    if(new Set(a.map(s=>rootNo(s))).size===1)return;                                              /* 한 tube 에서 나눈 번호 — 분리 때 복사 */
+    if(a.every(s=>(s.log||[]).some(l=>l.type==='bulk'&&/채집지 메모/.test(String(l.text||'')))))return;   /* 일괄 수정으로 붙인 것 */
+    grp('memodup','info','같은 채집지 메모가 여러 번호에 똑같이 붙어 있음',
+      'v39~v40 에서는 [저장 후 이어서]로 다음 표본을 넣으면 앞 표본의 채집지 메모가 그대로 따라 붙었습니다(v41에서 고침). 그 표본의 메모가 아니면 표본입력에서 ×로 지우십시오. 일부러 같은 메모를 붙인 것이면 그대로 두십시오.')
+      .items.push({no:a[0].no, text:`${a.map(s=>s.no).join(', ')} — ${specNotes(a[0]).map(n=>n.text).join(' / ').slice(0,70)}`});
+  });
   /* 7. 잔량 0 인데 칸을 차지 */
   DB.spec.forEach(s=>{ if((s.count||0)===0&&s.container&&s.position)
     grp('zero','info','개체 0인데 보관 칸을 차지',
