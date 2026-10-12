@@ -488,7 +488,7 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
           </div>
         </div>
         <span class="hint" id="e-siteinfo"></span>
-        <button type="button" class="btn sm" id="e-sitecard" style="display:none;margin-top:5px">지점 정보 · 메모</button></div>
+        <button type="button" class="btn sm" id="e-sitecard" style="display:none;margin-top:5px">지점 정보</button></div>
       <div><label class="fl">채집일 (시작) <a class="lnk" id="e-dmode" style="font-weight:400;font-size:11.5px;margin-left:4px" title="받은 표본처럼 연·월만 알거나 날짜를 모를 때">일부만 앎 · 미상</a></label>
         <input type="date" id="e-date">
         <div id="e-dpart" class="rowflex" style="display:none;gap:6px;flex-wrap:nowrap">
@@ -524,7 +524,6 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
         <div><label class="fl">고도 (m)</label>
           <div class="rowflex" style="gap:6px;flex-wrap:nowrap"><input type="number" id="s-elev">
           <button class="btn" id="s-elev-get" title="Open-Meteo DEM에서 조회">조회</button></div></div>
-        <div><label class="fl">메모</label><input type="text" id="s-note" placeholder="서식지, 접근로 등"></div>
       </div>
       <div class="grid g4" style="margin-top:10px;align-items:end">
         <div><button type="button" class="btn" id="s-map" style="width:100%">지도에서 찾기</button></div>
@@ -534,6 +533,16 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
         <div><label class="fl">범위 · 불확실성 (m)</label><input type="number" id="s-unc" min="0" placeholder="예: 30"></div>
         <div class="hint" id="s-cinfo">지도에서 찾기 → 지도를 누르면 좌표·고도·주소가 채워집니다. 지역만 알면 그 지역을 검색해 ‘대략’으로.</div>
       </div>
+    </div>
+
+    <div id="e-snbox" style="margin-top:12px">
+      <label class="fl">채집지 메모 — 이 표본에만 남습니다 <span class="hint" style="font-weight:400">같은 지점(채집지 미상 포함)을 쓰는 다른 표본에는 보이지 않습니다 · 저장을 눌러야 남습니다</span></label>
+      <div id="e-snlist"></div>
+      <div class="rowflex" id="e-snrow" style="gap:6px;margin-top:4px">
+        <input type="date" id="e-sndate" style="width:150px">
+        <div class="grow" style="min-width:170px"><input type="text" id="e-sntext" placeholder="예: 비 온 다음날 · 등화 21–23시 · 받은 경위 · 원 라벨을 이렇게 읽은 근거"></div>
+        <button type="button" class="btn" id="e-snadd">추가</button></div>
+      <div id="e-snlegacy"></div>
     </div>
 
     <div class="grid g3" style="margin-top:12px">
@@ -847,7 +856,7 @@ footer .inner{max-width:1360px;margin:0 auto;padding:16px 20px;display:flex;gap:
   <div class="card"><div class="card-h">채집지점 <span class="hint" id="sl-info" style="font-weight:400"></span><span class="sp"></span>
       <input type="text" id="sl-q" placeholder="지점 검색 — 주소 · 영문 · 메모" autocomplete="off" style="width:min(260px,100%)"></div>
     <div class="card-b" style="padding:0"><div class="tbl-wrap" style="border:0;max-height:420px"><table>
-      <thead><tr><th>지점 — 누르면 정보 · 메모</th><th class="c">표본</th><th class="c">마지막 채집</th><th>최근 메모</th></tr></thead>
+      <thead><tr><th>지점 — 누르면 지점 정보</th><th class="c">표본</th><th class="c">마지막 채집</th><th>지점 설명</th></tr></thead>
       <tbody id="sl-tb"></tbody></table></div></div></div>
 </section>
 
@@ -1013,13 +1022,14 @@ const sciFmt=s=>esc(s)
   .replace(SCIRM,'<span class="rm">$1</span>');
 
 /* ─────── 상태 ─────── */
-const BUILD='2026-10-09 · v38';
+const BUILD='2026-10-12 · v39';
 const DB={spec:[],site:[],chk:[],cont:[]};
 const SHA={};
 let CFG={owner:'',repo:'',branch:'main',store:'local',token:'',
          coll:'이재호',collen:'JH Lee',prefix:'JH',inst:''};
 let dirty=false, editing=null, queue=[], selected=new Set(), boxSel=null, editLog=[];
-let formSnap=null, formFP0='', pendNote='';      /* 입력 화면을 채울 때의 기록 — 저장 전에 동기화·일괄 수정 등으로 바뀐 칸을 되돌리지 않기 위해 */
+let formSnap=null, formFP0='', pendNote='';
+let editSN=[], snEdit=-1, snMove=[];   /* 표본의 채집지 메모(화면 상태) · 고치는 줄 · 저장 때 지점에서 뺄 예전 메모 */      /* 입력 화면을 채울 때의 기록 — 저장 전에 동기화·일괄 수정 등으로 바뀐 칸을 되돌리지 않기 위해 */
 
 const PATH={spec:'data/specimens.jsonl',site:'data/sites.jsonl',cont:'data/containers.jsonl',chk:'data/checklist.jsonl'};
 const PRES={wet:'액침',dry:'건조'};
@@ -1321,7 +1331,7 @@ function filtered(){
     if(!q)return true;
     const st=siteOf(s.site_id);
     return [s.no,s.legacy_no,s.kor,s.sci,s.family_ko,s.family_la,s.order_ko,
-            st&&st.locality_ko,st&&st.region].some(v=>String(v||'').toLowerCase().includes(q));
+            st&&st.locality_ko,st&&st.region,...specNotes(s).map(n=>n.text)].some(v=>String(v||'').toLowerCase().includes(q));
   });
 }
 /* 계보 — 모체 번호 → 분리된 번호들. 손자까지 따라 내려간다 */
@@ -1415,7 +1425,7 @@ function renderList(){
       <td>${esc(s.family_ko||s.family_la||'')}</td>
       <td>${st?`<a class="lnk" data-map="${esc(s.site_id)}" title="${esc([st.locality_en||'',
             st.lon!=null?fmt6(st.lon)+', '+fmt6(st.lat):'',st.elev!=null?st.elev+'m':'',st.note||'',
-            lastNote(st)?'메모 '+lastNote(st).date+' '+lastNote(st).text:''].filter(Boolean).join(' · '))}
+            specNotes(s).length?'메모 '+specNotes(s).slice(-1)[0].date+' '+specNotes(s).slice(-1)[0].text:''].filter(Boolean).join(' · '))}
 — 지도에서 보기">${esc(siteText(st))}</a>`:''}</td>
       <td class="n mono c">${esc(dateStr(s))||(s.date_unknown?'<span class="hint">미상</span>':'')}</td>
       <td class="n c">${PRES[s.preservation]||''} ${SEX[s.sex]||''}</td>
@@ -1716,9 +1726,10 @@ function siteChanged(){
   const sb=$('#e-sitecard');
   if(sb){sb.style.display=s?'':'none';
     const nn=siteNotes(s).length, iss=s?siteIssues(s):[];
-    sb.textContent=`지점 정보 · 메모${nn?` ${nn}건`:''}${iss.length?' · ⚠ 확인':''}`;
+    sb.textContent=`지점 정보${iss.length?' · ⚠ 확인':''}${nn?` · 예전 메모 ${nn}`:''}`;
     sb.style.color=iss.some(x=>x.lvl==='bad')?'var(--bad)':'';
     sb.onclick=()=>s&&openSiteCard(s.site_id);}
+  renderSNLegacy();
   paintDaySites();
 }
 function pickSite(id){ $('#e-site').value=id; paintSiteBtn(); siteChanged(); closeSitePick(); }
@@ -1887,12 +1898,12 @@ function resolveSite(){
   const id=nextSiteId();
   const nsite={site_id:id, region:$('#s-region').value, locality_ko:ko,
     locality_en:$('#s-en').value.trim()||romanize(ko), lon, lat,
-    elev:intOrNull($('#s-elev').value), note:$('#s-note').value.trim()};       /* 고도 0(해안)도 0 으로 */
+    elev:intOrNull($('#s-elev').value)};       /* 고도 0(해안)도 0 으로. 공통 메모 칸은 v39에서 없앰 — 메모는 표본마다 */
   if($('#s-csrc').value)nsite.coord_src=$('#s-csrc').value;
   if(intOrNull($('#s-unc').value)!=null)nsite.unc=intOrNull($('#s-unc').value);
   DB.site.push(nsite);
   if(dup)setTimeout(()=>say(`주소가 같은 ${dup.site_id}와 좌표가 ${Math.round(distM(lat,lon,dup.lat,dup.lon))}m 달라 새 지점 ${id}로 등록했습니다.`,'warn'),50);
-  ['#s-ko','#s-en','#s-lon','#s-lat','#s-elev','#s-note','#s-unc'].forEach(x=>$(x).value=''); $('#s-csrc').value='';
+  ['#s-ko','#s-en','#s-lon','#s-lat','#s-elev','#s-unc'].forEach(x=>$(x).value=''); $('#s-csrc').value='';
   $('#s-region').value=''; delete $('#s-en').dataset.touched;
   return id;
 }
@@ -1985,6 +1996,66 @@ $('#lg-add').onclick=()=>{
   editLog.sort((a,b)=>String(a.date).localeCompare(String(b.date)));
   $('#lg-text').value=''; renderLog();
 };
+
+/* ─── 채집지 메모 — 표본마다 따로 (v39) ───
+   v35~v38 은 지점 카드에 적어 그 지점을 쓰는 모든 표본에 보였다. '채집지 미상'처럼 여러 표본이 함께 쓰는
+   지점에서 남의 메모가 섞였다(사용자 지적). 이제 s.site_notes=[{date,text}] 로 표본에 붙고 [저장]으로 함께 저장된다.
+   분리할 때는 다른 채집 정보처럼 새 번호에 복사되고, 그 뒤로는 서로 따로다. 지점에 남은 예전 메모(st.notes)는
+   지우지 않고, 표본을 열면 [이 표본으로 옮기기]·[복사]를 낸다. */
+const specNotes=s=>Array.isArray(s&&s.site_notes)?s.site_notes:[];
+const snSort=L=>L.sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')));
+function renderSN(){
+  const B=$('#e-snlist'); if(!B)return;
+  const ro=snapMode;
+  $('#e-snrow').style.display=ro?'none':'';
+  B.innerHTML=editSN.length?`<div class="tbl-wrap" style="margin-top:4px"><table><tbody>${editSN.map((n,i)=>snEdit===i&&!ro
+    ?`<tr><td style="width:150px"><input type="date" id="e-snedate" value="${esc(n.date||'')}"></td>
+        <td><input type="text" id="e-snetext" value="${esc(n.text||'')}"></td>
+        <td class="c n" style="width:118px"><button type="button" class="btn sm pri" id="e-snesave">확인</button> <button type="button" class="btn sm" id="e-snecancel">취소</button></td></tr>`
+    :`<tr><td class="mono c n" style="width:104px">${esc(n.date||'')}</td><td style="white-space:pre-wrap">${esc(n.text||'')}</td>
+        <td class="c n" style="width:118px">${ro?'':`<button type="button" class="btn sm" data-sned="${i}">수정</button> <button type="button" class="btn sm dgr" data-sndel="${i}" title="두 번 누르면 지웁니다">×</button>`}</td></tr>`).join('')}</tbody></table></div>`:'';
+  $$('#e-snlist [data-sned]').forEach(b=>b.onclick=()=>{snEdit=+b.dataset.sned; renderSN(); setTimeout(()=>$('#e-snetext')&&$('#e-snetext').focus(),0);});
+  $$('#e-snlist [data-sndel]').forEach(b=>b.onclick=()=>{
+    if(!b.dataset.arm){b.dataset.arm='1';b.textContent='삭제?';setTimeout(()=>{if(b.isConnected){delete b.dataset.arm;b.textContent='×';}},3000);return;}
+    editSN.splice(+b.dataset.sndel,1); snEdit=-1; renderSN(); say('메모를 뺐습니다 — [저장]해야 반영됩니다.','warn');});
+  if($('#e-snesave'))$('#e-snesave').onclick=()=>{
+    const tx=$('#e-snetext').value.trim(); if(!tx)return say('내용이 비었습니다 — 지우려면 ×를 쓰십시오.','warn');
+    editSN[snEdit]={...editSN[snEdit],date:$('#e-snedate').value||editSN[snEdit].date,text:tx}; snSort(editSN); snEdit=-1; renderSN();};
+  if($('#e-snecancel'))$('#e-snecancel').onclick=()=>{snEdit=-1; renderSN();};
+  renderSNLegacy();
+}
+/* 지점에 남은 예전 메모 — 이 표본 것이면 옮기고(저장 때 지점에서 빠짐), 여러 표본 것이면 복사 */
+function renderSNLegacy(){
+  const B=$('#e-snlegacy'); if(!B)return;
+  const st=siteOf($('#e-site').value);
+  const L=st?siteNotes(st).filter(n=>!snMove.some(m=>m.site_id===st.site_id&&m.sig===jsig(n))):[];
+  if(!L.length||snapMode){B.innerHTML='';return;}
+  const n=siteSpecs(st.site_id).length;
+  B.innerHTML=`<div class="warnbox" style="margin-top:8px;font-size:12.5px;line-height:1.6">
+    <b>예전 방식 메모 ${L.length}건</b> — 지점 ${esc(st.site_id)}${st.unknown?' (채집지 미상)':''}에 적혀 있어 이 지점을 쓰는 표본 ${n}건 모두에 보이던 것입니다.
+    이 표본 것이면 <b>옮기기</b>(저장하면 지점에서 빠지고 이 표본에만 남음), 여러 표본에 해당하면 <b>복사</b>한 뒤 지점 카드에서 지우십시오.
+    <div class="tbl-wrap" style="margin-top:6px;background:var(--canvas);color:var(--fg)"><table><tbody>${L.map((x,i)=>`<tr>
+      <td class="mono c n" style="width:92px;vertical-align:top">${esc(x.date||'')}</td>
+      <td><div style="white-space:pre-wrap">${esc(x.text||'')}</div>
+        <div class="rowflex" style="gap:6px;margin-top:5px"><button type="button" class="btn sm pri" data-snmv="${i}">이 표본으로 옮기기</button><button type="button" class="btn sm" data-sncp="${i}">복사</button></div></td></tr>`).join('')}</tbody></table></div></div>`;
+  const has=x=>editSN.some(e=>String(e.date||'')===String(x.date||'')&&String(e.text||'')===String(x.text||''));
+  $$('#e-snlegacy [data-snmv]').forEach(b=>b.onclick=()=>{const x=L[+b.dataset.snmv]; if(!x)return;
+    if(!has(x))editSN.push({date:x.date||today(),text:x.text||''}); snSort(editSN);
+    snMove.push({site_id:st.site_id,sig:jsig(x)}); renderSN();
+    say('이 표본 메모로 넣었습니다 — [저장]하면 지점에서 빠지고 이 표본에만 남습니다.','warn');});
+  $$('#e-snlegacy [data-sncp]').forEach(b=>b.onclick=()=>{const x=L[+b.dataset.sncp]; if(!x)return;
+    if(has(x))return say('이미 이 표본 메모에 있습니다.','warn');
+    editSN.push({date:x.date||today(),text:x.text||''}); snSort(editSN); renderSN();
+    say('이 표본 메모에 복사했습니다 — [저장]하면 남습니다. 지점의 예전 메모는 그대로입니다.');});
+}
+const snAdd=()=>{
+  const tx=$('#e-sntext').value.trim(); if(!tx)return say('메모 내용을 넣으십시오.','warn');
+  editSN.push({date:$('#e-sndate').value||today(),text:tx}); snSort(editSN);
+  $('#e-sntext').value=''; renderSN();
+  say(`메모를 넣었습니다 — ${editing?jUl(editing):'표본을'} [저장]하면 이 표본에만 남습니다.`);
+};
+$('#e-snadd').onclick=snAdd;
+$('#e-sntext').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing){e.preventDefault();snAdd();}});
 
 /* 채집번호 자릿수 안내 + 자동 정형화 */
 function noHint(){
@@ -2123,6 +2194,8 @@ function fillEntry(no){
   dnaFill(s);
   editLog=s?JSON.parse(JSON.stringify(s.log||[])):[];
   $('#lg-date').value=today(); renderLog();
+  editSN=s?JSON.parse(JSON.stringify(specNotes(s))):[]; snEdit=-1; snMove=[];
+  $('#e-sndate').value=today(); $('#e-sntext').value=''; renderSN();
   v('#e-search',''); closeAC();
   delete $('#e-collen').dataset.touched; delete $('#e-deten').dataset.touched;
   paintMethods();
@@ -2131,7 +2204,8 @@ function fillEntry(no){
   formFP0=formFP();
 }
 /* 입력 화면의 지문 — 채운 뒤 사용자가 손댔는지 */
-const formFP=()=>$$('#v-entry input, #v-entry select, #v-entry textarea').map(e=>e.type==='checkbox'||e.type==='radio'?(e.checked?'1':'0'):e.value).join('\u0001');
+const formFP=()=>$$('#v-entry input, #v-entry select, #v-entry textarea').map(e=>e.type==='checkbox'||e.type==='radio'?(e.checked?'1':'0'):e.value).join('\u0001')
+  +'\u0002'+JSON.stringify([editLog,editSN,snMove]);
 $('#e-new').onclick=()=>go('entry','new');
 
 /* 이전 동정 한 건 — 이력용 */
@@ -2212,6 +2286,7 @@ function saveRec(){
   if(dd.unknown)rec.date_unknown=true; else delete rec.date_unknown;
   const srcNew=readSrc(old); if(srcNew)rec.src=srcNew; else delete rec.src;
   if($('#x-dnasp').checked&&!$('#x-dna').checked)rec.exp.dna_spare=true; else delete rec.exp.dna_spare;
+  { const sn=snSort(editSN.map(n=>({...n}))); if(sn.length)rec.site_notes=sn; else delete rec.site_notes; }
   /* 화면을 연 뒤 이 기록이 동기화 병합·일괄 수정·점검 고치기 등으로 바뀌었다 — 화면의 옛 값이
      그 변경을 되돌리지 않도록, 내가 화면에서 고친 칸만 화면 값으로 하고 나머지는 지금 기록을 따른다 */
   let staleMsg='';
@@ -2232,6 +2307,12 @@ function saveRec(){
   const i=DB.spec.findIndex(s=>s.no===editing);
   if(i>=0)DB.spec[i]=rec; else DB.spec.push(rec);
   DB.spec.sort((a,b)=>numOf(a.no)-numOf(b.no));
+  /* 예전 지점 메모를 이 표본으로 옮긴 것 — 저장할 때 지점에서 뺀다(같은 글이 여럿이면 하나만) */
+  let moved=0;
+  snMove.forEach(m=>{const st=siteOf(m.site_id); if(!st)return; const L=siteNotes(st), k=L.findIndex(n=>jsig(n)===m.sig);
+    if(k>=0){st.notes=L.filter((_,j)=>j!==k); if(!st.notes.length)delete st.notes; moved++;}});
+  snMove=[];
+  if(moved){staleMsg=[staleMsg,`지점에 있던 예전 메모 ${moved}건을 ${jRo(rec.no)} 옮겼습니다 — 지점에서는 빠졌습니다.`].filter(Boolean).join(' '); renderSiteList();}
   editing=rec.no; mark(true); bkSoon('표본 저장'); refreshFilters(); renderList(); counts(); fillContList(); refreshChecks();
   if(staleMsg)setTimeout(()=>say(staleMsg,'warn'),0);
   siteOptions(rec.site_id);
@@ -2737,16 +2818,16 @@ $('#s-ko').addEventListener('input',()=>{
 $('#s-en').addEventListener('input',()=>$('#s-en').dataset.touched='1');
 $('#s-map').onclick=()=>openMapPicker({title:'지도에서 찾기 — 새 지점',
   lon:round6($('#s-lon').value), lat:round6($('#s-lat').value), elev:intOrNull($('#s-elev').value),
-  unc:intOrNull($('#s-unc').value), csrc:$('#s-csrc').value, hasAddr:!!$('#s-ko').value.trim(),
+  unc:intOrNull($('#s-unc').value), csrc:$('#s-csrc').value, ko:$('#s-ko').value.trim(),
   onPickSite:id=>{pickSite(id); say(`이미 있는 지점 ${id}를 골랐습니다.`);},
   onApply:r=>{
     $('#s-lon').value=r.lon; $('#s-lat').value=r.lat;
     $('#s-elev').value=r.csrc==='area'?'':(r.elev??'');
     $('#s-unc').value=r.unc??''; $('#s-csrc').value=r.csrc||'';
-    if(r.addr&&r.addr.ko&&(r.useAddr||!$('#s-ko').value.trim())){
-      $('#s-ko').value=r.addr.ko; $('#s-ko').dispatchEvent(new Event('input'));
-      if(r.addr.region&&REGIONS.includes(r.addr.region))$('#s-region').value=r.addr.region;}   /* 주소를 넣으면 지역도 그 주소에 맞춘다 */
-    say('지도에서 고른 위치를 넣었습니다 — 표본을 저장하면 지점도 함께 등록됩니다.');}});
+    if(r.useKo){
+      if(r.ko!==$('#s-ko').value.trim()){$('#s-ko').value=r.ko; $('#s-ko').dispatchEvent(new Event('input'));}
+      if(r.region&&REGIONS.includes(r.region))$('#s-region').value=r.region;}   /* 주소를 넣으면 지역도 그 주소에 맞춘다 */
+    say(`지도에서 고른 위치${r.useKo?'와 주소':''}를 넣었습니다 — 표본을 저장하면 지점도 함께 등록됩니다.`);}});
 /* 좌표는 어디서나 소수점 6자리로 통일 — 길게 넣어도 라벨이 안 잘린다 */
 const fmt6=v=>(v==null||v==='')?'':String(+(+v).toFixed(6));
 const round6=v=>{const n=parseFloat(v);return isNaN(n)?null:+n.toFixed(6);};
@@ -3291,7 +3372,7 @@ function leRow(k){
 /* 채집지 줄을 고쳤으면 — 지점 전체의 영문 표기로 올릴지 묻는 확인란 (켜 둔 상태는 유지) */
 function leSiteBox(){
   const s=specOf(LE.no), st=s&&siteOf(s.site_id), B=$('#le-site'); if(!B)return;
-  if(!(leHas('loc')&&st)){B.innerHTML='';return;}
+  if(!(leHas('loc')&&st)||st.unknown){B.innerHTML='';return;}   /* 채집지 미상은 여러 표본이 함께 쓰는 자리 */
   if($('#le-siteapply'))return;
   const n=siteSpecs(st.site_id).length;
   B.innerHTML=`<label class="rowflex warnbox" style="gap:7px;cursor:pointer;flex-wrap:nowrap"><input type="checkbox" id="le-siteapply" style="width:auto;flex:none">
@@ -3395,8 +3476,7 @@ function popupHTML(st,e){
     +`표본 ${e.n}건 · ${e.ind}개체<hr style="border:0;border-top:1px solid #eee;margin:5px 0">`
     +sp.slice(0,5).map(a=>`${esc(a[0])} <span style="color:#888">${a[1]}</span>`).join('<br>')
     +(sp.length>5?`<br><span style="color:#888">외 ${sp.length-5}종</span>`:'')
-    +(lastNote(st)?`<hr style="border:0;border-top:1px solid #eee;margin:5px 0"><span style="color:#666">메모 ${esc(lastNote(st).date)}</span> ${esc(lastNote(st).text)}`:'')
-    +`<div style="margin-top:7px"><button class="btn sm" data-sitecard="${esc(st.site_id)}">지점 정보 · 메모${siteNotes(st).length?' '+siteNotes(st).length+'건':''}</button></div>`;
+    +`<div style="margin-top:7px"><button class="btn sm" data-sitecard="${esc(st.site_id)}">지점 정보${siteNotes(st).length?' · 예전 메모 '+siteNotes(st).length:''}</button></div>`;
 }
 function mapRender(focus){
   const specs=mapSpecs();
@@ -3572,14 +3652,20 @@ function openMapPicker(o){
       <div class="grid g2" style="margin-top:8px;align-items:end">
         <div><label class="fl">좌표 출처</label><select id="mp-csrc">
           <option value="map">지도에서 찍음</option><option value="gps">GPS 실측</option><option value="area">대략 (지역 중심) — 라벨에 좌표 안 찍음</option></select></div>
-        <div id="mp-addr" class="hint"></div>
+        <div><label class="fl">한글 주소 — 지도를 누르면 그 자리 주소로 바뀝니다 (고쳐 써도 됨)</label>
+          <input type="text" id="mp-ko" placeholder="지도를 누르면 채워집니다 (리 단위)"></div>
       </div>
+      <div class="rowflex" style="gap:4px 10px;margin-top:5px;align-items:baseline">
+        <label class="rowflex" style="gap:4px;font-size:12.5px;white-space:nowrap"><input type="checkbox" id="mp-useko" checked style="width:auto">적용하면 한글 주소 · 지역 · 영문 표기도 이것으로</label>
+        <span class="hint" id="mp-addr"></span></div>
       <div id="mp-near" style="margin-top:8px"></div>`,
     foot:`<span class="hint" id="mp-info"></span><div class="grow"></div>
       <button class="btn" id="mp-cancel">취소</button><button class="btn pri" id="mp-apply">이 위치 적용</button>`,
     beforeClose:()=>{ if(MP&&MP.map){try{MP.map.remove();}catch(e){}} MP=null; return true; }});
   if(o.unc!=null)$('#mp-unc').value=o.unc;
   if(o.csrc)$('#mp-csrc').value=o.csrc;
+  $('#mp-ko').value=o.ko||'';
+  $('#mp-ko').addEventListener('input',()=>{$('#mp-addr').textContent='직접 고친 주소 — 적용하면 이대로 들어갑니다.';});
   setTimeout(()=>{
     if(!MP)return;
     const m=L.map('mp-map',{scrollWheelZoom:true}); MP.map=m;
@@ -3589,7 +3675,7 @@ function openMapPicker(o){
         .addTo(m).bindTooltip(`${st.site_id} ${siteText(st)}`); });
     if(o.lat!=null&&o.lon!=null){
       m.setView([o.lat,o.lon],o.unc&&o.unc>2000?11:15);
-      mpSet(o.lat,o.lon,{noRev:true,noElev:o.elev!=null,keepUnc:true});
+      mpSet(o.lat,o.lon,{noRev:!!o.ko,noElev:o.elev!=null,keepUnc:true});   /* 좌표만 있고 주소가 비었으면 열 때 주소를 찾아 채운다 */
       if(o.elev!=null)$('#mp-elev').value=o.elev;
     }else m.setView([36.3,127.9],7);
     m.on('click',e=>{const z=m.getZoom(); mpSet(e.latlng.lat,e.latlng.lng,{fromMap:true});
@@ -3615,8 +3701,10 @@ function openMapPicker(o){
     const lon=round6($('#mp-lon').value), lat=round6($('#mp-lat').value);
     if(lon==null||lat==null)return say('지도를 눌러 위치를 고르십시오.','warn');
     if(Math.abs(lat)>90||Math.abs(lon)>180)return say('좌표 범위를 벗어났습니다.','bad');
+    const ko=$('#mp-ko').value.trim().replace(/\s+/g,' ');
     const r={lon,lat,elev:intOrNull($('#mp-elev').value),unc:intOrNull($('#mp-unc').value),csrc:$('#mp-csrc').value,
-      addr:MP.addr,useAddr:MP.useAddr};
+      addr:MP.addr, ko, useKo:$('#mp-useko').checked&&!!ko,
+      region:koRegion(ko)||(MP.addr&&MP.addr.ko===ko?MP.addr.region:'')};
     const cb=MP.o.onApply; closeModal(true); if(cb)cb(r);
   };
 }
@@ -3634,7 +3722,7 @@ function mpSet(lat,lon,op={}){
   mpCircle();
   if(!op.noElev){ $('#mp-elev').value=''; const my=++MP.elevSeq;
     if($('#mp-csrc').value!=='area')fetchElev(lat,lon).then(el=>{ if(MP&&my===MP.elevSeq&&el!=null)$('#mp-elev').value=Math.round(el); }); }
-  if(op.addr){mpShowAddr(op.addr);} else if(!op.noRev)mpReverse(lat,lon);
+  if(op.addr){mpShowAddr(op.addr,{force:op.forceAddr});} else if(!op.noRev)mpReverse(lat,lon);
   mpNear(lat,lon);
 }
 function mpCircle(){
@@ -3644,13 +3732,22 @@ function mpCircle(){
   if(u>0)MP.circ=L.circle(p,{radius:u,color:'#cf222e',weight:1,dashArray:'4 4',fillOpacity:.06,interactive:false}).addTo(MP.map);
   $('#mp-info').textContent=u>0?`범위 ±${fmtUnc(u)}`:'';
 }
-function mpShowAddr(a){
-  if(!MP)return; MP.addr=a&&a.ko?a:null; MP.useAddr=false;
-  const D=$('#mp-addr'); if(!D)return;
-  if(!MP.addr){D.textContent='';return;}
-  D.innerHTML=`주소 제안: <b>${esc(a.ko)}</b>${a.region?` (라벨 ${esc(rcode(a.region))})`:''}`
-    +(MP.o.hasAddr?` <button class="btn sm" id="mp-useaddr">한글 주소도 이것으로</button>`:' — 적용하면 비어 있는 주소 칸에 들어갑니다');
-  if($('#mp-useaddr'))$('#mp-useaddr').onclick=()=>{MP.useAddr=true; $('#mp-useaddr').textContent='주소도 바꿈 ✓'; $('#mp-useaddr').disabled=true;};
+/* 주소 비교 — 도 이름 꼴(충남/충청남도)은 무시하고, 도가 서로 다르면 다른 곳 */
+const addrRest=s=>{const t=String(s||'').trim().split(/\s+/).filter(Boolean); if(t.length&&shortProv(t[0]))t.shift(); return t.join(' ');};
+const sameArea=(cur,rev)=>{const pa=shortProv(String(cur||'').trim().split(/\s+/)[0]||''), pb=shortProv(String(rev||'').trim().split(/\s+/)[0]||'');
+  if(pa&&pb&&pa!==pb)return false; const a=addrRest(cur), b=addrRest(rev); return !!b&&(a===b||a.startsWith(b+' '));};
+const koRegion=ko=>{const p=shortProv(String(ko||'').trim().split(/\s+/)[0]||''); if(p)return p; const sg=sigunIn(ko); return sg&&sg[1].length===1?sg[1][0]:'';};
+function mpShowAddr(a,op={}){
+  if(!MP)return; MP.addr=a&&a.ko?a:null;
+  const D=$('#mp-addr'), K=$('#mp-ko'); if(!D||!K)return;
+  if(!MP.addr){D.textContent='이 자리의 주소를 찾지 못했습니다 — 한글 주소는 직접 적으십시오.';return;}
+  const cur=K.value.trim(), lab=a.region?` · 라벨 ${esc(rcode(a.region))}`:'';
+  if(cur===a.ko){D.innerHTML=`지도 주소와 지금 주소가 같습니다${lab}.`; return;}
+  if(!op.force&&cur&&sameArea(cur,a.ko)){
+    D.innerHTML=`지도 주소 <b>${esc(a.ko)}</b>${lab} — 지금 주소와 같은 곳이라 번지까지 적힌 지금 주소를 그대로 둡니다. 번지가 바뀌었으면 고쳐 쓰십시오.`;
+    return;}
+  K.value=a.ko;
+  D.innerHTML=`핀 자리의 주소로 채웠습니다${lab} — 리 단위까지라 번지는 직접 덧붙이십시오.`;
 }
 async function mpReverse(lat,lon){
   if(!MP)return; const my=++MP.revSeq;
@@ -3693,15 +3790,14 @@ async function mpSearch(){
       MP.map.fitBounds([[bb[0],bb[2]],[bb[1],bb[3]]]);
       $('#mp-csrc').value='area';
       const u=Math.round(span(x)/10)*10;
-      setTimeout(()=>{mpSet(+x.lat,+x.lon,{unc:u,noElev:true,addr:koAddr(x.address)}); $('#mp-elev').value='';},60);
+      setTimeout(()=>{mpSet(+x.lat,+x.lon,{unc:u,noElev:true,addr:koAddr(x.address),forceAddr:true}); $('#mp-elev').value='';},60);
     });
   }catch(e){ R.innerHTML='<div class="ac-item"><span class="m">주소 검색이 막혔습니다(인터넷 · 회사망 확인) — 지도를 직접 움직여 찾으십시오.</span></div>'; }
 }
 
-/* ═══════════ 채집지점 카드 — 정보 고치기 + 메모를 계속 쌓는다 ═══════════
-   같은 지점을 해마다 다시 간다. 갈 때마다 서식지 상태·날씨·채집 방법을 날짜와 함께
-   덧붙인다 — site.notes = [{date:'YYYY-MM-DD', text}] (날짜순).
-   예전 한 줄 메모(site.note)는 접근로·서식지 같은 '고정 설명'으로 그대로 둔다. */
+/* ═══════════ 채집지점 카드 — 지점 정보 고치기 ═══════════
+   v39: 채집지 메모는 표본마다(s.site_notes). site.notes 는 v35~v38 에 지점에 적던 예전 메모로,
+   지우지 않고 보여 주며 표본으로 옮기거나 지운다. site.note 는 '지점 설명'(모든 표본 공통). */
 const REGIONS=['경기','강원','충북','충남','전북','전남','경북','경남','제주','서울','인천','세종','대전','광주','대구','울산','부산'];
 const PROVFULL={'경기':'경기도','강원':'강원특별자치도','충북':'충청북도','충남':'충청남도','전북':'전북특별자치도',
   '전남':'전라남도','경북':'경상북도','경남':'경상남도','제주':'제주특별자치도','서울':'서울특별시','인천':'인천광역시',
@@ -3820,10 +3916,9 @@ function scChanged(){
   return Object.keys(v).some(k=>String(v[k]??'')!==String(cur[k]??''));
 }
 function scBeforeClose(){
-  const tx=$('#sc-ntext');
-  const pend=(tx&&tx.value.trim())||scChanged()||scEdit>=0;
+  const pend=scChanged();
   if(pend&&!scWarned){scWarned=true;
-    say('저장하지 않은 내용이 있습니다 — 메모는 [추가], 지점 정보는 [정보 저장]을 누르십시오. 버리려면 닫기를 한 번 더 누르십시오.','warn');
+    say('저장하지 않은 지점 정보가 있습니다 — [정보 저장]을 누르십시오. 버리려면 닫기를 한 번 더 누르십시오.','warn');
     return false;}
   return true;
 }
@@ -3839,18 +3934,18 @@ function paintSiteCard(){
   const sp=new Map(); specs.forEach(s=>{const k=s.kor||s.sci||'(미동정)';sp.set(k,(sp.get(k)||0)+(s.count||0));});
   const spl=[...sp.entries()].sort((a,b)=>b[1]-a[1]);
   const regOpts=['',...REGIONS,...(st.region&&!REGIONS.includes(st.region)?[st.region]:[])];
-  const RO=ro?'readonly':'';
+  const roI=ro||!!st.unknown;                     /* 채집지 미상 — 여러 표본이 함께 쓰는 자리라 고치지 못하게 */
+  const RO=roI?'readonly':'';
   B.innerHTML=`
   ${iss.length?`<div class="${iss.some(x=>x.lvl==='bad')?'badbox':'warnbox'}" style="margin-bottom:14px">
     ${iss.map((x,i)=>`<div>⚠ ${esc(x.msg)}${x.fix&&!ro?` <button class="btn sm" data-scfix="${i}">${esc(x.fixLabel)}</button>`:''}</div>`).join('')}</div>`:''}
   <div class="grid g2" style="gap:6px 26px;align-items:start">
     <div>
-      <div class="msec">메모 기록 <span class="hint" style="font-weight:400">갈 때마다 날짜와 함께 계속 쌓입니다</span></div>
-      <div id="sc-notes"></div>
-      ${ro?'':`<div class="rowflex" style="margin-top:8px;gap:6px">
-        <input type="date" id="sc-ndate" style="width:150px" value="${today()}">
-        <div class="grow" style="min-width:170px"><input type="text" id="sc-ntext" placeholder="예: 비 온 다음날 · 등화 21–23시 · 계곡 쪽 벌채로 관목층 사라짐"></div>
-        <button class="btn pri" id="sc-nadd">추가</button></div>`}
+      ${siteNotes(st).length?`<div class="msec">예전 방식 메모 <span class="hint" style="font-weight:400">이 지점 표본 ${specs.length}건 모두에 보이던 것</span></div>
+      <p class="hint" style="margin-bottom:6px">이제 채집지 메모는 <b>표본마다 따로</b> 적습니다(표본입력 ①채집의 ‘채집지 메모’). 아래는 예전에 지점에 적은 메모로, 지우지 않고 남겨 두었습니다.
+        해당 표본을 표본입력에서 열면 [이 표본으로 옮기기] · [복사]가 보입니다. 다 옮겼으면 여기서 지우십시오.</p>
+      <div id="sc-notes"></div>`
+      :`<p class="hint" style="margin:2px 0 6px">채집지 메모는 표본마다 따로 적습니다 — 표본입력 ①채집의 ‘채집지 메모’. 이 지점을 쓰는 다른 표본에는 보이지 않습니다.</p>`}
       <div class="msec">이 지점의 채집 <span class="hint" style="font-weight:400">표본 ${specs.length}건 · ${ind}개체</span></div>
       ${vlist.length?`<div class="vchips">${vlist.map(v=>`<span>${esc(v.d)} · ${v.n}건</span>`).join('')}</div>
         <p class="hint" style="margin-top:8px">${spl.slice(0,6).map(a=>`${esc(a[0])} ${a[1]}`).join(' · ')}${spl.length>6?` 외 ${spl.length-6}종`:''}</p>`
@@ -3861,31 +3956,33 @@ function paintSiteCard(){
       </div>
     </div>
     <div>
-      <div class="msec">지점 정보 <span class="hint" style="font-weight:400">고치면 이 지점 표본 ${specs.length}건의 라벨이 함께 바뀝니다</span></div>
+      <div class="msec">지점 정보 <span class="hint" style="font-weight:400">${st.unknown?'고칠 수 없음':`고치면 이 지점 표본 ${specs.length}건의 라벨이 함께 바뀝니다`}</span></div>
+      ${st.unknown?`<div class="warnbox" style="margin-bottom:10px;font-size:12.5px">채집지 미상은 채집지를 모르는 표본${specs.length?` ${specs.length}건`:''}이 <b>함께 쓰는 자리</b>입니다. 여기서 주소 · 좌표를 고치면
+        그 표본 모두가 바뀌므로 고칠 수 없게 했습니다. 채집지를 알게 된 표본은 표본입력에서 그 표본의 <b>채집지점을 바꾸십시오</b>(새 지점 · 지도에서 찾기 · 이 지역 전체(대략)).</div>`:''}
       <div class="grid g2" style="gap:10px">
-        <div><label class="fl">지역 (라벨 약호)</label><select id="sc-region" ${ro?'disabled':''}>${regOpts.map(r=>
+        <div><label class="fl">지역 (라벨 약호)</label><select id="sc-region" ${roI?'disabled':''}>${regOpts.map(r=>
           `<option value="${esc(r)}" ${String(st.region||'')===r?'selected':''}>${r?esc(r):'— 선택 —'}</option>`).join('')}</select></div>
         <div><label class="fl">라벨 머리줄</label><div class="mono" id="sc-rcode" style="padding:6px 2px">KOREA ${esc(rcode(st.region)||'—')}</div></div>
       </div>
       <div style="margin-top:10px"><label class="fl">채집지 (한글)</label><input type="text" id="sc-ko" value="${esc(st.locality_ko||'')}" ${RO}></div>
       <div style="margin-top:10px"><label class="fl">영문 표기 — 라벨에 이대로 찍힙니다</label>
         <div class="rowflex" style="gap:6px;flex-wrap:nowrap"><input type="text" id="sc-en" value="${esc(st.locality_en||'')}" ${RO}>
-        ${ro?'':'<button class="btn" id="sc-en-auto" title="한글 주소에서 다시 만듭니다">자동</button>'}</div></div>
+        ${roI?'':'<button class="btn" id="sc-en-auto" title="한글 주소에서 다시 만듭니다">자동</button>'}</div></div>
       <div class="grid g3" style="margin-top:10px;gap:10px">
         <div><label class="fl">경도</label><input type="text" id="sc-lon" class="mono" value="${esc(fmt6(st.lon))}" ${RO}></div>
         <div><label class="fl">위도</label><input type="text" id="sc-lat" class="mono" value="${esc(fmt6(st.lat))}" ${RO}></div>
         <div><label class="fl">고도 (m)</label><div class="rowflex" style="gap:6px;flex-wrap:nowrap">
-          <input type="number" id="sc-elev" value="${st.elev??''}" ${RO}>${ro?'':'<button class="btn" id="sc-elev-get">조회</button>'}</div></div>
+          <input type="number" id="sc-elev" value="${st.elev??''}" ${RO}>${roI?'':'<button class="btn" id="sc-elev-get">조회</button>'}</div></div>
       </div>
       <div class="grid g3" style="margin-top:10px;gap:10px;align-items:end">
-        <div><label class="fl">좌표 출처</label><select id="sc-csrc" ${ro?'disabled':''}>${['','gps','map','area'].map(k=>
+        <div><label class="fl">좌표 출처</label><select id="sc-csrc" ${roI?'disabled':''}>${['','gps','map','area'].map(k=>
           `<option value="${k}" ${String(st.coord_src||'')===k?'selected':''}>${k?CSRC[k]:'—'}</option>`).join('')}</select></div>
         <div><label class="fl">범위 · 불확실성 (m)</label><input type="number" id="sc-unc" min="0" value="${st.unc??''}" ${RO}></div>
-        <div>${ro?'':'<button class="btn" id="sc-map" style="width:100%">지도에서 찾기</button>'}</div>
+        <div>${roI?'':'<button class="btn" id="sc-map" style="width:100%">지도에서 찾기</button>'}</div>
       </div>
-      <div style="margin-top:10px"><label class="fl">고정 설명 — 접근로 · 서식지처럼 늘 같은 것</label>
+      <div style="margin-top:10px"><label class="fl">지점 설명 — 이 지점을 쓰는 모든 표본에 보입니다(접근로 · 지형). 채집 메모는 표본마다</label>
         <input type="text" id="sc-note" value="${esc(st.note||'')}" ${RO}></div>
-      ${ro?'':`<div class="rowflex" style="margin-top:12px"><span class="hint" id="sc-dirty"></span><div class="grow"></div>
+      ${roI?'':`<div class="rowflex" style="margin-top:12px"><span class="hint" id="sc-dirty"></span><div class="grow"></div>
         <button class="btn pri" id="sc-save">정보 저장</button></div>`}
     </div>
   </div>`;
@@ -3898,7 +3995,7 @@ function paintSiteCard(){
   const leave=fn=>()=>{ if(closeModal())fn(); };
   if($('#sc-tolist'))$('#sc-tolist').onclick=leave(()=>{ $('#q').value=st.locality_ko||st.site_id; go('list'); filterChanged(); });
   if($('#sc-tomap'))$('#sc-tomap').onclick=leave(()=>go('map',st.site_id));
-  if(ro)return;
+  if(roI)return;
   const dirt=()=>{const d=scChanged(); $('#sc-dirty').textContent=d?'저장하지 않은 변경이 있습니다':''; $('#sc-dirty').style.color=d?'var(--warn)':'';};
   ['#sc-region','#sc-ko','#sc-en','#sc-lon','#sc-lat','#sc-elev','#sc-note','#sc-csrc','#sc-unc'].forEach(x=>{
     $(x).addEventListener('input',dirt); $(x).addEventListener('change',dirt);});
@@ -3911,15 +4008,15 @@ function paintSiteCard(){
   $('#sc-en-auto').onclick=()=>{$('#sc-en').value=romanize($('#sc-ko').value); dirt();};
   $('#sc-map').onclick=()=>openMapPicker({stack:true, siteId:st.site_id, title:`지도에서 찾기 — ${esc(st.site_id)}`,
     lon:round6($('#sc-lon').value), lat:round6($('#sc-lat').value), elev:intOrNull($('#sc-elev').value),
-    unc:intOrNull($('#sc-unc').value), csrc:$('#sc-csrc').value, hasAddr:!!$('#sc-ko').value.trim(),
+    unc:intOrNull($('#sc-unc').value), csrc:$('#sc-csrc').value, ko:$('#sc-ko').value.trim(),
     onApply:r=>{
       $('#sc-lon').value=r.lon; $('#sc-lat').value=r.lat;
       $('#sc-elev').value=r.csrc==='area'?'':(r.elev??$('#sc-elev').value);
       $('#sc-unc').value=r.unc??''; $('#sc-csrc').value=r.csrc||'';
-      if(r.addr&&r.addr.ko&&(r.useAddr||!$('#sc-ko').value.trim())){
-        $('#sc-ko').value=r.addr.ko; $('#sc-ko').dispatchEvent(new Event('input'));
-        if(r.addr.region&&REGIONS.includes(r.addr.region)){$('#sc-region').value=r.addr.region; $('#sc-region').dispatchEvent(new Event('change'));}}
-      dirt(); say('지도에서 고른 위치를 넣었습니다 — [정보 저장]을 눌러야 지점에 반영됩니다.');}});
+      if(r.useKo){
+        if(r.ko!==$('#sc-ko').value.trim()){$('#sc-ko').value=r.ko; $('#sc-ko').dispatchEvent(new Event('input'));}
+        if(r.region&&REGIONS.includes(r.region)){$('#sc-region').value=r.region; $('#sc-region').dispatchEvent(new Event('change'));}}
+      dirt(); say(`지도에서 고른 위치${r.useKo?'와 주소':''}를 넣었습니다 — [정보 저장]을 눌러야 지점에 반영됩니다.`);}});
   ['#sc-lon','#sc-lat'].forEach(x=>$(x).addEventListener('blur',()=>{const n=round6($(x).value);$(x).value=n==null?'':n;dirt();}));
   $('#sc-elev-get').onclick=async()=>{
     const la=parseFloat($('#sc-lat').value), lo=parseFloat($('#sc-lon').value);
@@ -3939,44 +4036,23 @@ function paintSiteCard(){
     scWarned=false; paintSiteCard();
     say(`${st.site_id} 지점 정보를 고쳤습니다 — 이 지점 표본 ${specs.length}건의 라벨에 반영됩니다. 확인 후 동기화하십시오.`,'warn');
   };
-  const add=()=>{
-    const tx=$('#sc-ntext').value.trim(); if(!tx)return say('메모 내용을 넣으십시오.','warn');
-    const d=$('#sc-ndate').value||today();
-    st.notes=[...siteNotes(st),{date:d,text:tx}].sort((a,b)=>String(a.date).localeCompare(String(b.date)));
-    $('#sc-ntext').value=''; scWarned=false;
-    mark(true); bkSoon('지점 메모 추가'); paintScNotes(); afterSiteNote();
-    say(`${st.site_id} 메모를 추가했습니다 (${d}) — 동기화하면 저장소에 남습니다.`);
-  };
-  $('#sc-nadd').onclick=add;
-  $('#sc-ntext').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing){e.preventDefault();add();}});
 }
 function afterSiteNote(){ renderSiteList(); siteChanged(); if($('#v-list').classList.contains('on'))renderList(); }
 function paintScNotes(){
   const st=siteOf(scId), N=$('#sc-notes'); if(!st||!N)return;
   const L=siteNotes(st);
-  if(!L.length){N.innerHTML='<p class="hint">아직 메모가 없습니다 — 아래에 날짜와 함께 적으십시오.</p>';return;}
-  N.innerHTML=`<div class="tbl-wrap"><table><tbody>${L.map((n,i)=>scEdit===i&&!snapMode
-    ?`<tr><td style="width:150px"><input type="date" id="sc-edate" value="${esc(n.date||'')}"></td>
-        <td><input type="text" id="sc-etext" value="${esc(n.text||'')}"></td>
-        <td class="c n" style="width:118px"><button class="btn sm pri" id="sc-esave">저장</button> <button class="btn sm" id="sc-ecancel">취소</button></td></tr>`
-    :`<tr><td class="mono c n" style="width:104px">${esc(n.date||'')}</td><td style="white-space:pre-wrap">${esc(n.text||'')}</td>
-        <td class="c n" style="width:118px">${snapMode?'':`<button class="btn sm" data-ned="${i}">수정</button> <button class="btn sm dgr" data-ndel="${i}" title="두 번 누르면 지웁니다">×</button>`}</td></tr>`).join('')}</tbody></table></div>`;
-  $$('#sc-notes [data-ned]').forEach(b=>b.onclick=()=>{scEdit=+b.dataset.ned;paintScNotes();
-    setTimeout(()=>$('#sc-etext')&&$('#sc-etext').focus(),0);});
-  $$('#sc-notes [data-ndel]').forEach(b=>b.onclick=()=>{
-    if(!b.dataset.arm){b.dataset.arm='1';b.textContent='삭제?';setTimeout(()=>{if(b.isConnected){delete b.dataset.arm;b.textContent='×';}},3000);return;}
-    const i=+b.dataset.ndel; const gone=siteNotes(st)[i];
-    st.notes=siteNotes(st).filter((_,k)=>k!==i);
-    mark(true); bkSoon('지점 메모 삭제'); paintScNotes(); afterSiteNote();
-    say(`메모를 지웠습니다 (${gone&&gone.date}) — 되돌리려면 설정의 자동 백업을 쓰십시오.`,'warn');
+  if(!L.length){N.innerHTML='<p class="hint">남은 예전 메모가 없습니다.</p>';return;}
+  N.innerHTML=`<div class="tbl-wrap"><table><tbody>${L.map((n,i)=>`<tr><td class="mono c n" style="width:104px">${esc(n.date||'')}</td>
+      <td style="white-space:pre-wrap">${esc(n.text||'')}</td>
+      <td class="c n" style="width:1%">${snapMode?'':`<button class="btn sm dgr" data-ndel="${i}" title="두 번 누르면 지웁니다">지우기</button>`}</td></tr>`).join('')}</tbody></table></div>`;
+  $$('#sc-notes [data-ndel]').forEach(b=>b.onclick=async()=>{
+    if(!b.dataset.arm){b.dataset.arm='1';b.textContent='지울까요?';setTimeout(()=>{if(b.isConnected){delete b.dataset.arm;b.textContent='지우기';}},3000);return;}
+    const i=+b.dataset.ndel, gone=siteNotes(st)[i]; if(!gone)return;
+    await bkPut('예전 지점 메모 지우기 직전');
+    st.notes=siteNotes(st).filter((_,k)=>k!==i); if(!st.notes.length)delete st.notes;
+    mark(true); paintSiteCard(); afterSiteNote(); refreshChecks();
+    say(`예전 메모를 지웠습니다 (${gone.date||''}) — 직전 상태는 자동 백업에 있습니다. 확인 후 동기화하십시오.`,'warn');
   });
-  if($('#sc-esave'))$('#sc-esave').onclick=()=>{
-    const tx=$('#sc-etext').value.trim(); if(!tx)return say('내용이 비었습니다 — 지우려면 ×를 쓰십시오.','warn');
-    const L2=siteNotes(st).slice(); L2[scEdit]={...L2[scEdit],date:$('#sc-edate').value||L2[scEdit].date,text:tx};
-    st.notes=L2.sort((a,b)=>String(a.date).localeCompare(String(b.date)));
-    scEdit=-1; mark(true); bkSoon('지점 메모 수정'); paintScNotes(); afterSiteNote();
-  };
-  if($('#sc-ecancel'))$('#sc-ecancel').onclick=()=>{scEdit=-1;paintScNotes();};
 }
 
 /* 지도 탭의 지점 목록 — 지점을 찾아 메모를 붙이는 곳. 한 번에 30줄까지만 그린다 */
@@ -3996,7 +4072,7 @@ function renderSiteList(){
     return `<tr data-sitecard="${esc(st.site_id)}" style="cursor:pointer">
       <td>${iss.length?`<span class="tag ${iss.some(x=>x.lvl==='bad')?'r':'w'}" data-tip="${esc(iss.map(x=>x.msg).join('\n'))}">확인</span> `:''}${esc(siteText(st))}</td>
       <td class="c mono">${n||''}</td><td class="c mono n">${esc((lastD.get(st.site_id)||['',''])[1])}</td>
-      <td class="hint">${ln?esc(ln.date+' — '+ln.text):''}${nn>1?` <span class="tag">외 ${nn-1}건</span>`:''}</td></tr>`;}).join('')
+      <td class="hint">${esc(st.note||'')}${nn?` <span class="tag w" data-tip="${esc(siteNotes(st).map(x=>x.date+' '+x.text).join('\n'))}">예전 메모 ${nn}건 — 표본으로 옮길 것</span>`:''}</td></tr>`;}).join('')
     ||`<tr><td colspan="4" style="padding:16px;text-align:center;color:var(--mut)">${DB.site.length?'일치하는 지점이 없습니다.':'등록된 지점이 없습니다.'}</td></tr>`;
   $('#sl-info').textContent=`${DB.site.length}곳${q?` 중 ${pool.length}곳`:''}${pool.length>CAP?` — ${CAP}곳까지 표시, 검색으로 좁히십시오`:''}`;
 }
@@ -4244,6 +4320,13 @@ function runChecks(){
   DB.spec.forEach(s=>{ const a=fromRoman(s.date), b=fromRoman(s.date2);
     if(a&&b&&b<a)grp('daterev','warn','종료일이 시작일보다 앞','트랩 회수일(종료일)이 설치일(시작일)보다 앞섭니다 — 둘이 뒤바뀌었는지 확인하십시오.')
       .items.push({no:s.no, text:`${s.date} ~ ${s.date2}`, fix:()=>{const x=s.date; s.date=s.date2; s.date2=x;}, fixLabel:'두 날짜 바꾸기'}); });
+  /* 6-4. 지점에 남은 예전 공통 메모 — 이제 메모는 표본마다. 채집지 미상 것은 남의 표본에 보이므로 먼저 */
+  DB.site.forEach(st=>{const L=siteNotes(st); if(!L.length)return; const n=siteSpecs(st.site_id).length;
+    grp(st.unknown?'sitenote_unk':'sitenote',st.unknown?'warn':'info',
+      st.unknown?'채집지 미상에 예전 공통 메모가 남아 있음':'지점에 예전 공통 메모가 남아 있음',
+      '이제 채집지 메모는 표본마다 따로 적습니다. 예전에 지점에 적은 메모는 지우지 않고 남겨 두었는데, 그 지점을 쓰는 표본 모두에 보이던 것입니다. 해당 표본을 열어 [이 표본으로 옮기기](여러 표본이면 [복사])를 누르고, 다 옮겼으면 지점 카드에서 지우십시오.')
+      .items.push({site:st.site_id, text:`${st.site_id} ${siteText(st)} — 메모 ${L.length}건 · 표본 ${n}건에 보이던 것: ${L.slice(0,2).map(x=>x.text).join(' / ')}${L.length>2?' …':''}`,
+        act:()=>openSiteCard(st.site_id), actLabel:'지점 카드'}); });
   /* 7. 잔량 0 인데 칸을 차지 */
   DB.spec.forEach(s=>{ if((s.count||0)===0&&s.container&&s.position)
     grp('zero','info','개체 0인데 보관 칸을 차지',
@@ -4632,8 +4715,8 @@ function renderDossier(no){
           <div><span class="fl">채집지</span>${st?`${esc(siteText(st))}<br>
             <span class="hint">${esc(st.locality_en||'')}${st.region?` · 라벨 ${esc(rcode(st.region))}`:''}</span>
             ${st.coord_src||st.unc?`<br><span class="hint">좌표 ${esc(CSRC[st.coord_src]||'')}${st.unc?' ±'+fmtUnc(st.unc):''}${st.coord_src==='area'?' — 라벨에 좌표를 찍지 않음':''}</span>`:''}
-            ${siteNotes(st).slice(-3).map(n=>`<br><span class="hint">메모 ${esc(n.date)} — ${esc(n.text)}</span>`).join('')}
-            <br><button class="btn sm" style="margin-top:5px" data-sitecard="${esc(st.site_id)}">지점 정보 · 메모${siteNotes(st).length?' '+siteNotes(st).length+'건':''}</button>`:'<span class="hint">지점 정보 없음</span>'}</div>
+            <br><button class="btn sm" style="margin-top:5px" data-sitecard="${esc(st.site_id)}">지점 정보${siteNotes(st).length?' · 예전 메모 '+siteNotes(st).length:''}</button>`:'<span class="hint">지점 정보 없음</span>'}</div>
+          ${specNotes(s).length?`<div><span class="fl">채집지 메모</span>${specNotes(s).map(n=>`<div><span class="mono hint">${esc(n.date||'')}</span> ${esc(n.text||'')}</div>`).join('')}</div>`:''}
           <div><span class="fl">보존 · 보관</span>${esc(keep)}</div>
           <div><span class="fl">동정</span>${s.det_by?`${esc(s.det_by)}${s.det_date?` · ${esc(s.det_date)}`:''}`:'<span class="hint">기록 없음</span>'}
             ${s.det_note?`<br><span class="hint">${esc(s.det_note)}</span>`:''}</div>
@@ -4723,7 +4806,7 @@ $('#dl-xls').onclick=()=>{
     '박스','칸','모체번호','계보 원번호','분리한 번호','해부','DNA','사진','실험비고','추출번호','쓴 조직','추출물 보관',
     'COI 결과','COI 번호','마커·결과(전체)',
     '소장 상태','상태 날짜·내용','기록수','동정비고','출력일','재출력 필요','라벨 직접수정',
-    '입수','준 사람·기관','받은 날','원래 번호','원 라벨','이전 동정'];
+    '입수','준 사람·기관','받은 날','원래 번호','원 라벨','이전 동정','채집지 메모'];
   const q=v=>{v=v==null?'':String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
   const L=[H.join(',')], km=kidMap();
   /* COI 줄 — 바코드 결과와 번호를 따로 열로 (GenBank 대조표용) */
@@ -4741,7 +4824,8 @@ $('#dl-xls').onclick=()=>{
       userLogs(s).length||'',s.det_note,s.printed_at,needsReprint(s)?'Y':'',
       Object.keys(ledit(s)).filter(k=>lhas(s,k)).map(k=>LNAME[k]+': '+ledit(s)[k]).join(' / '),
       SRCT[(s.src||{}).type]||'',(s.src||{}).from,(s.src||{}).date,(s.src||{}).no,(s.src||{}).verbatim,
-      (s.det_hist||[]).map(h=>`${[h.kor,h.sci].filter(Boolean).join(' ')}${h.det_by?' ('+h.det_by+')':''}${h.until?' ~'+h.until:''}`).join(' | ')].map(q).join(','));});
+      (s.det_hist||[]).map(h=>`${[h.kor,h.sci].filter(Boolean).join(' ')}${h.det_by?' ('+h.det_by+')':''}${h.until?' ~'+h.until:''}`).join(' | '),
+      specNotes(s).map(n=>`${n.date||''} ${n.text||''}`.trim()).join(' | ')].map(q).join(','));});
   download(`표본목록_${today()}.csv`,'\ufeff'+L.join('\r\n'));
   say(`${rows.length}건을 내보냈습니다 — Excel에서 바로 열립니다.`);
 };
@@ -4813,6 +4897,9 @@ function openBulk(nos){
             <input type="text" id="bk-detby" placeholder="동정자"><input type="text" id="bk-deten" placeholder="동정자(영문)">
             <input type="date" id="bk-detdate"><select id="bk-status"><option value="">확정</option><option value="undet">미동정</option>
               <option value="new">신종 후보</option><option value="unrec">미기록 후보</option></select></div></td></tr>
+        <tr data-bg="memo"><td class="c"><input type="checkbox" data-bc="memo" style="width:auto"></td><td class="n">채집지 메모</td>
+          <td><div class="rowflex" style="gap:6px"><input type="date" id="bk-mdate" style="width:150px" value="${today()}">
+            <input type="text" id="bk-mtext" placeholder="고른 표본마다 한 줄씩 따로 붙습니다 — 나중에 한 표본에서 고쳐도 다른 표본은 그대로" style="flex:1;min-width:160px"></div></td></tr>
         <tr data-bg="src"><td class="c"><input type="checkbox" data-bc="src" style="width:auto"></td><td class="n">입수</td>
           <td><div class="rowflex" style="gap:6px"><select id="bk-srct" style="width:auto"><option value="">직접 채집</option>
             ${Object.entries(SRCT).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select>
@@ -4821,7 +4908,7 @@ function openBulk(nos){
     foot:`<span class="hint" id="bk-info">바꿀 항목을 체크하십시오</span><div class="grow"></div>
       <button class="btn" id="bk-cancel">취소</button><button class="btn pri" id="bk-go">적용</button>`});
   const info=()=>{const g=$$('#mbody [data-bc]:checked').map(c=>c.closest('tr').children[1].textContent);
-    $('#bk-info').textContent=g.length?`${S.length}건의 ${jUl(g.join('·'))} 바꿉니다`:'바꿀 항목을 체크하십시오';};
+    $('#bk-info').textContent=g.length?`${S.length}건의 ${jUl(g.join('·'))} 바꿉니다${g.includes('채집지 메모')?' (메모는 표본마다 한 줄씩 덧붙임)':''}`:'바꿀 항목을 체크하십시오';};
   $$('#mbody tr[data-bg]').forEach(tr=>tr.querySelectorAll('input,select').forEach(el=>{
     if(el.dataset.bc)el.addEventListener('change',info);
     else el.addEventListener('input',()=>{tr.querySelector('[data-bc]').checked=true; info();});}));
@@ -4843,6 +4930,7 @@ function openBulk(nos){
       else if($('#bk-dy').value){const m=+$('#bk-dm').value||0; D={date:m?`${$('#bk-dy').value}-${RN[m]}`:String($('#bk-dy').value),date2:null,unk:false};}
       else return say('채집일을 넣거나 미상을 체크하십시오.','bad');
     }
+    if(G.has('memo')&&!$('#bk-mtext').value.trim())return say('붙일 메모 내용을 넣으십시오.','bad');
     await bkPut('일괄 수정 직전');
     const kor=$('#bk-kor').value.trim(), sci=$('#bk-sci').value.trim();
     const hit=sci?(DB.chk.find(r=>r.name===sci)||DB.chk.find(r=>(r.genus||'')===sci.split(/\s+/)[0])):null;
@@ -4863,6 +4951,7 @@ function openBulk(nos){
         const put=(k,v)=>{if(v)r[k]=v; else delete r[k];};
         put('type',$('#bk-srct').value); put('from',$('#bk-srcfrom').value.trim()); put('date',$('#bk-srcdate').value);
         if(Object.keys(r).length)s.src=r; else delete s.src; ch.push('입수');}
+      if(G.has('memo')){s.site_notes=snSort([...specNotes(s),{date:$('#bk-mdate').value||today(),text:$('#bk-mtext').value.trim()}]); ch.push('채집지 메모');}
       if(ch.length){n++; s.log=[...(s.log||[]),{date:today(),type:'bulk',text:'일괄 수정: '+ch.join('·')}];}
     });
     closeModal(true); mark(true); bkSoon('일괄 수정'); refreshFilters(); renderList(); counts(); refreshChecks();
@@ -4907,7 +4996,7 @@ async function baseSet(src){
   if(!L.includes(BASE.sig)){ await kvPut('base:'+BASE.sig,{spec:BASE.spec,site:BASE.site,cont:BASE.cont,at:Date.now()});
     L.push(BASE.sig); while(L.length>6)await kvDel('base:'+L.shift()); await kvPut('bases',L); }
 }
-const UNION=new Set(['log','notes','det_hist']);
+const UNION=new Set(['log','notes','det_hist','site_notes']);
 function mergeFields(b,m,t){
   b=b||{}; const ks=[...new Set([...Object.keys(b),...Object.keys(m),...Object.keys(t)])];
   const r={}, bad=[];
@@ -4998,7 +5087,7 @@ function reviveRefs(R){
 const FLBL={kor:'국명',sci:'학명',order_ko:'목',order_la:'목(라틴)',family_ko:'과',family_la:'과(라틴)',det_by:'동정자',det_by_en:'동정자(영문)',
   det_date:'동정일',det_note:'동정비고',status:'동정 상태',det_hist:'동정 이력',site_id:'채집지점',date:'채집일',date2:'종료일',date_unknown:'날짜 미상',
   method:'채집방법',collector:'채집자',collector_en:'채집자(영문)',count:'개체수',sex:'성별',preservation:'보존',container:'박스',position:'칸',
-  parent_no:'모체번호',legacy_no:'옛 번호',src:'입수',dna:'DNA 상세',log:'기록',label_edit:'라벨 직접 수정',printed_at:'출력일',printed_sig:'출력 지문',
+  parent_no:'모체번호',legacy_no:'옛 번호',src:'입수',dna:'DNA 상세',log:'기록',site_notes:'채집지 메모',label_edit:'라벨 직접 수정',printed_at:'출력일',printed_sig:'출력 지문',
   'exp.dissect':'해부','exp.dna':'DNA','exp.dna_spare':'DNA 예비','exp.photo':'사진','exp.note':'실험비고','exp.gen_cont':'생식기 박스','exp.gen_pos':'생식기 칸',
   region:'지역',locality_ko:'채집지(한글)',locality_en:'채집지(영문)',lon:'경도',lat:'위도',elev:'고도',coord_src:'좌표 출처',unc:'범위(m)',notes:'지점 메모',note:'메모',
   type:'형식',place:'보관 장소',place_prev:'이전 보관 장소',name:'이름'};
